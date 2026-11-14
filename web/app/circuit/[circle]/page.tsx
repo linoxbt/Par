@@ -11,7 +11,7 @@ import { erc20Abi } from "@/lib/mezoAbi"
 import { fmtBps, fmtDuration, fmtMusd, short, toNum } from "@/lib/format"
 import { useChainNow, useMe, useProtocol, useTx } from "@/lib/hooks"
 import { CircuitGraph, useTween } from "@/components/CircuitGraph"
-import { Addr, Badge, Button, Card, CardTitle, Field, LinkButton, Stat, TxStatus, inputCls } from "@/components/ui"
+import { Addr, Badge, Button, Card, CardTitle, Field, LinkButton, Meter, Stat, TxStatus, inputCls } from "@/components/ui"
 
 const Z = "0x0000000000000000000000000000000000000000" as Address
 const NAMES = ["Importer", "Wholesaler", "Repairer", "Shop D", "Shop E", "Shop F", "Shop G", "Shop H"]
@@ -86,26 +86,32 @@ export default function CircleBoard({ params }: { params: { circle: string } }) 
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <Link href="/circuit" className="text-xs text-ink-400 hover:text-white">
-            ← circles
+          <Link href="/circuit" className="text-xs text-muted hover:text-fg">
+            ← All circles
           </Link>
-          <h1 className="display mt-2 text-5xl">Circle <em className="text-btc">№{String(circleId)}</em></h1>
-          <p className="text-sm text-ink-400">
+          <h1 className="h-display mt-2 text-4xl">Circle #{String(circleId)}</h1>
+          <p className="text-sm text-muted">
             {s.members.length} members · cycle {fmtDuration(Number(s.circle.cycleLength))} · settle window {fmtDuration(Number(s.circle.settleWindow))} · admin{" "}
             <Addr a={s.circle.admin} />
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" disabled={s.cycle === 0n} onClick={() => setPicked(s.cycle - 1n)}>
-            ←
-          </Button>
-          <span className="num text-sm">
-            cycle {String(s.cycle)}
-            {s.current === s.cycle ? " (current)" : ""}
-          </span>
-          <Button variant="ghost" disabled={s.current === undefined || s.cycle >= s.current} onClick={() => setPicked(s.cycle + 1n)}>
-            →
-          </Button>
+          <div className="flex items-center rounded-full border border-line bg-white p-1 shadow-card">
+            <button className="rounded-full px-3 py-1.5 text-sm text-muted hover:bg-soft disabled:opacity-30" disabled={s.cycle === 0n} onClick={() => setPicked(s.cycle - 1n)}>
+              ←
+            </button>
+            <span className="num px-2 text-sm">
+              Cycle {String(s.cycle)}
+              {s.current === s.cycle ? <span className="text-subtle"> · now</span> : ""}
+            </span>
+            <button
+              className="rounded-full px-3 py-1.5 text-sm text-muted hover:bg-soft disabled:opacity-30"
+              disabled={s.current === undefined || s.cycle >= s.current}
+              onClick={() => setPicked(s.cycle + 1n)}
+            >
+              →
+            </button>
+          </div>
           <LinkButton href={`/circuit/${circleId}/invoice`}>Invoices</LinkButton>
         </div>
       </div>
@@ -116,14 +122,14 @@ export default function CircleBoard({ params }: { params: { circle: string } }) 
           <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
             <div className="num text-base">
               {phase === "netted" ? (
-                <span className="text-btc">
+                <span className="text-btc-ink">
                   {fmtMusd(s.gross, 0)} cleared · {fmtMusd(s.totalOwed, 0)} moved · {fmtBps(s.efficiencyBps)} netted
                 </span>
               ) : (
                 <>
-                  <span className="text-ink-400">needs money: </span>
+                  <span className="text-muted">needs money: </span>
                   <span>{n0(counter)} MUSD</span>
-                  {"removed" in frame && frame.removed ? <span className="ml-2 text-sm text-btc">−{n0(frame.removed)} around a loop</span> : null}
+                  {"removed" in frame && frame.removed ? <span className="ml-2 text-sm text-btc-ink">−{n0(frame.removed)} around a loop</span> : null}
                 </>
               )}
             </div>
@@ -147,32 +153,30 @@ export default function CircleBoard({ params }: { params: { circle: string } }) 
             <Stat label="Netting efficiency" value={fmtBps(s.efficiencyBps)} tone="ok" />
             <Stat label="Collected" value={fmtMusd(s.collected, 0)} unit="MUSD" />
             <div className="col-span-2">
-              <div className="h-1.5 overflow-hidden bg-ink-700">
-                <div className="h-full bg-btc" style={{ width: `${Number(s.efficiencyBps) / 100}%` }} />
-              </div>
+              <Meter value={Number(s.efficiencyBps) / 100} tone="btc" />
             </div>
           </Card>
           <Card className="flex flex-col gap-2 text-sm">
             {!closed ? (
               <>
-                <span className="text-ink-400">Cycle closes in</span>
-                <span className="display text-5xl">{fmtDuration(Number(s.close) - now)}</span>
-                <span className="text-xs text-ink-400">Invoices accepted now net into this cycle.</span>
+                <span className="text-muted">Cycle closes in</span>
+                <span className="num text-4xl font-medium tracking-tight">{fmtDuration(Number(s.close) - now)}</span>
+                <span className="text-xs text-muted">Invoices accepted now net into this cycle.</span>
               </>
             ) : !forceable ? (
               <>
-                <span className="text-ink-400">Closed · net debtors settle within</span>
-                <span className="display text-5xl text-warn">{fmtDuration(windowEnd - now)}</span>
-                <span className="text-xs text-ink-400">After that, anyone can force-settle a debtor from their vault.</span>
+                <span className="text-muted">Closed · net debtors settle within</span>
+                <span className="num text-4xl font-medium tracking-tight text-warn">{fmtDuration(windowEnd - now)}</span>
+                <span className="text-xs text-muted">After that, anyone can force-settle a debtor from their vault.</span>
               </>
             ) : s.collected >= s.totalOwed ? (
               <>
-                <span className="text-ink-400">Cycle settled</span>
+                <span className="text-muted">Cycle settled</span>
                 <span className="text-lg text-ok">Every net debtor has paid. Net creditors can claim.</span>
               </>
             ) : (
               <>
-                <span className="text-ink-400">Settle window over</span>
+                <span className="text-muted">Settle window over</span>
                 <span className="text-lg text-bad">Unpaid debtors can be force-settled</span>
               </>
             )}
@@ -182,10 +186,10 @@ export default function CircleBoard({ params }: { params: { circle: string } }) 
       </div>
 
       <Card>
-        <CardTitle index="02">Members</CardTitle>
+        <CardTitle>Members</CardTitle>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="text-left font-mono text-[10px] uppercase tracking-widest text-ink-400">
+            <thead className="text-left text-xs font-medium text-muted">
               <tr>
                 <th className="py-2">Member</th>
                 <th>Vault · line</th>
@@ -213,13 +217,13 @@ function MemberRow({ i, r, circleId, cycle, forceable, onDone }: { i: number; r:
   const t = useTx(onDone)
   const net = r.net as bigint
   return (
-    <tr className="border-t border-ink-800">
+    <tr className="border-t border-line">
       <td className="py-2.5">
         <div className="font-semibold">{NAMES[i] ?? "Member"}</div>
         <Addr a={r.member} />
       </td>
       <td>
-        <Addr a={r.vault} /> <span className="num text-xs text-ink-400">#{String(r.lineId ?? "")}</span>
+        <Addr a={r.vault} /> <span className="num text-xs text-muted">#{String(r.lineId ?? "")}</span>
       </td>
       <td className="num text-right">{fmtMusd(r.limit, 0)}</td>
       <td className={`num pr-6 text-right ${net < 0n ? "text-bad" : net > 0n ? "text-ok" : ""}`}>
@@ -269,7 +273,7 @@ function MyPosition({ circleId, cycle, row, closed, canClaim, onDone }: { circle
       </div>
       {net < 0n && !row.settled && (
         <>
-          <p className="text-xs text-ink-400">
+          <p className="text-xs text-muted">
             {closed ? "Settle now to avoid a forced draw on your clearing line." : "You can settle once the cycle closes."} Your MUSD: {fmtMusd(bal)}. Need MUSD? Withdraw
             it from your vault&apos;s buffer on the Vault page.
           </p>
@@ -312,8 +316,7 @@ function AddMember({ circleId, onDone }: { circleId: bigint; onDone: () => void 
   const t = useTx(onDone)
   return (
     <Card className="flex flex-col gap-3">
-      <CardTitle index="03">Add a member (admin)</CardTitle>
-      <p className="text-sm text-ink-400">The member must own the vault, and the vault must hold an active clearing line pointed at Par Circuit.</p>
+      <CardTitle sub="The member must own the vault, and the vault must hold an active clearing line pointed at Par Circuit.">Add a member</CardTitle>
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Member address">
           <input className={inputCls} value={member} onChange={(e) => setMember(e.target.value)} placeholder="0x…" />

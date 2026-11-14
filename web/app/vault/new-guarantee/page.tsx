@@ -7,15 +7,15 @@ import { decodeEventLog, isAddress, parseEther, type Address } from "viem"
 import { useReadContract } from "wagmi"
 import { ConnectButton } from "@rainbow-me/rainbowkit"
 import { parVaultAbi } from "@/lib/abi"
-import { fmtMusd, fmtRatio } from "@/lib/format"
+import { fmtDuration, fmtMusd, fmtRatio, short } from "@/lib/format"
 import { useMe, useProtocol, useTx, useVault, useVaultsOf } from "@/lib/hooks"
-import { Button, Card, Empty, Field, LinkButton, NotDeployed, PageHead, TxStatus, inputCls } from "@/components/ui"
+import { Badge, Button, Card, CardTitle, Field, LinkButton, NotDeployed, PageHead, Segmented, TxStatus, inputCls } from "@/components/ui"
 import { CONFIGURED } from "@/lib/config"
 
 const PERIODS = [
   { label: "Monthly", sec: 30 * 86400, grace: 3 * 86400 },
   { label: "Weekly", sec: 7 * 86400, grace: 86400 },
-  { label: "Demo (2 min)", sec: 120, grace: 10 },
+  { label: "Demo · 2 min", sec: 120, grace: 10 },
 ]
 
 export default function NewGuaranteePage() {
@@ -75,28 +75,33 @@ function Builder() {
     }
   })
 
+  const Head = <PageHead eyebrow="Guarantee" title="Make a promise" sub="Every promise is stress-tested before it exists: BTC −40%, everything called at once, vault still above 160%." />
   if (!CONFIGURED)
     return (
-      <div className="flex flex-col gap-6">
-        <PageHead index="02" eyebrow="Guarantee builder" title={<>Make a <em className="text-btc">promise.</em></>} />
+      <div className="flex flex-col gap-8">
+        {Head}
         <NotDeployed />
       </div>
     )
   if (!isConnected)
     return (
-      <Empty>
-        <p className="mb-4">Connect to make a guarantee from your vault.</p>
-        <div className="flex justify-center">
+      <div className="flex flex-col gap-8">
+        {Head}
+        <Card className="flex flex-col items-center gap-4 py-14 text-center">
+          <div className="text-lg font-medium">Connect to make a guarantee from your vault</div>
           <ConnectButton />
-        </div>
-      </Empty>
+        </Card>
+      </div>
     )
   if (!vault || (v && !v.troveActive))
     return (
-      <Empty>
-        <p className="mb-4">You need a vault with an open trove first.</p>
-        <LinkButton href="/vault">Go to vault</LinkButton>
-      </Empty>
+      <div className="flex flex-col gap-8">
+        {Head}
+        <Card className="flex flex-col items-center gap-4 py-14 text-center">
+          <div className="text-lg font-medium">You need a vault with an open trove first</div>
+          <LinkButton href="/vault">Go to vault</LinkButton>
+        </Card>
+      </div>
     )
 
   const benOk = isAddress(beneficiary)
@@ -144,9 +149,10 @@ function Builder() {
 
   if (created !== undefined)
     return (
-      <Card className="flex flex-col items-start gap-4">
-        <h1 className="display text-5xl">Promise <em className="text-btc">made.</em></h1>
-        <p className="text-ink-300">Nothing has been borrowed. Send the certificate link to the beneficiary.</p>
+      <Card className="mx-auto flex max-w-lg flex-col items-center gap-4 py-14 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-ok-wash text-xl text-ok">✓</span>
+        <h1 className="h-display text-3xl">Promise made</h1>
+        <p className="text-muted">Nothing has been borrowed. Send the certificate link to the beneficiary.</p>
         <div className="flex gap-3">
           <LinkButton href={`/c/${vault}/${created}`}>Open certificate</LinkButton>
           {type === "rent" && (
@@ -158,107 +164,133 @@ function Builder() {
       </Card>
     )
 
+  const stressPct = p ? Number(p.stressBps) / 100 : 40
   return (
-    <div className="flex flex-col gap-6">
-      <PageHead index="02" eyebrow="Guarantee builder" title={<>Make a <em className="text-btc">promise.</em></>} sub="Every promise is stress-tested before it exists: BTC −40%, everything called at once, vault still above 160%." />
-      <div className="flex gap-2">
-        {(["rent", "bond"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setType(t)}
-            className={`rounded-[3px] border px-4 py-2 font-mono text-xs uppercase tracking-wider ${type === t ? "border-btc bg-btc/10 text-btc" : "border-ink-600 text-ink-300"}`}
-          >
-            {t === "rent" ? "Rent / installments" : "Bond / claim"}
-          </button>
-        ))}
-      </div>
+    <div className="flex flex-col gap-8">
+      {Head}
+      <div className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
+        <Card>
+          <div className="mb-6">
+            <Segmented
+              value={type}
+              onChange={setType}
+              options={[
+                { value: "rent", label: "Rent / installments" },
+                { value: "bond", label: "Bond / claim" },
+              ]}
+            />
+          </div>
+          <div className="flex flex-col gap-5">
+            <Field label="Who gets paid" hint="Landlord, supplier or client. Any Mezo address.">
+              <input className={inputCls} placeholder="0x…" value={beneficiary} onChange={(e) => setBeneficiary(e.target.value)} />
+            </Field>
+            <Field label={type === "rent" ? "Who pays (tenant)" : "Principal (can dispute claims)"} hint="Defaults to you.">
+              <input className={inputCls} placeholder={me} value={principal} onChange={(e) => setPrincipal(e.target.value)} />
+            </Field>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="flex flex-col gap-4 lg:col-span-2">
-          <Field label="Beneficiary (who gets paid)" hint="Landlord, supplier, client. Any Mezo address.">
-            <input className={inputCls} placeholder="0x…" value={beneficiary} onChange={(e) => setBeneficiary(e.target.value)} />
-          </Field>
-          <Field label={type === "rent" ? "Payer (tenant)" : "Principal (may dispute claims)"} hint="Defaults to you.">
-            <input className={inputCls} placeholder={me} value={principal} onChange={(e) => setPrincipal(e.target.value)} />
-          </Field>
-
-          {type === "rent" ? (
-            <>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <Field label="Installment (MUSD)">
-                  <input className={inputCls} value={installment} onChange={(e) => setInstallment(e.target.value)} />
-                </Field>
-                <Field label="Installments">
-                  <input className={inputCls} value={count} onChange={(e) => setCount(e.target.value)} />
-                </Field>
-                <Field label="Schedule">
-                  <select className={inputCls} value={periodIdx} onChange={(e) => setPeriodIdx(Number(e.target.value))}>
-                    {PERIODS.map((p, i) => (
-                      <option key={p.label} value={i}>
-                        {p.label}
-                      </option>
+            {type === "rent" ? (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Installment (MUSD)">
+                    <input className={inputCls} value={installment} onChange={(e) => setInstallment(e.target.value)} />
+                  </Field>
+                  <Field label="Number of installments">
+                    <input className={inputCls} value={count} onChange={(e) => setCount(e.target.value)} />
+                  </Field>
+                </div>
+                <div className="flex flex-col gap-1.5" role="group" aria-label="Schedule">
+                  <span className="text-sm font-medium">Schedule</span>
+                  <div className="flex flex-wrap gap-2">
+                    {PERIODS.map((pp, i) => (
+                      <button
+                        type="button"
+                        key={pp.label}
+                        onClick={() => setPeriodIdx(i)}
+                        className={`rounded-full border px-4 py-2 text-sm transition ${periodIdx === i ? "border-fg bg-fg text-white" : "border-line-strong bg-white hover:border-fg"}`}
+                      >
+                        {pp.label}
+                      </button>
                     ))}
-                  </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Cover cap (MUSD)" hint="The most the vault will ever pay.">
+                    <input className={inputCls} value={cover} onChange={(e) => setCover(e.target.value)} />
+                  </Field>
+                  <Field label="First due in (seconds)" hint={`Grace after each due date: ${fmtDuration(period.grace)}`}>
+                    <input className={inputCls} placeholder={String(periodIdx === 2 ? 30 : period.sec)} value={startIn} onChange={(e) => setStartIn(e.target.value)} />
+                  </Field>
+                </div>
+                {capTooBig && <p className="rounded-lg bg-bad-wash px-3 py-2 text-sm text-bad">Cover cap can&apos;t exceed installment × count.</p>}
+              </>
+            ) : (
+              <>
+                <Field label="Arbiter" hint="Decides disputed claims. Both sides should agree on it.">
+                  <input className={inputCls} placeholder="0x…" value={arbiter} onChange={(e) => setArbiter(e.target.value)} />
                 </Field>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Cover cap (MUSD)" hint="The most the vault will ever pay. ≤ installment × count.">
-                  <input className={inputCls} value={cover} onChange={(e) => setCover(e.target.value)} />
-                </Field>
-                <Field label="First due in (seconds)" hint={`Grace after each due date: ${period.grace}s`}>
-                  <input className={inputCls} placeholder={String(periodIdx === 2 ? 30 : period.sec)} value={startIn} onChange={(e) => setStartIn(e.target.value)} />
-                </Field>
-              </div>
-              {capTooBig && <p className="text-sm text-bad">Cover cap can&apos;t exceed installment × count.</p>}
-            </>
-          ) : (
-            <>
-              <Field label="Arbiter (decides disputed claims)" hint="Chosen per bond and agreed by both sides.">
-                <input className={inputCls} placeholder="0x…" value={arbiter} onChange={(e) => setArbiter(e.target.value)} />
-              </Field>
-              <div className="grid grid-cols-3 gap-3">
-                <Field label="Cover (MUSD)">
-                  <input className={inputCls} value={bondCap} onChange={(e) => setBondCap(e.target.value)} />
-                </Field>
-                <Field label="Valid for (days)">
-                  <input className={inputCls} value={bondDays} onChange={(e) => setBondDays(e.target.value)} />
-                </Field>
-                <Field label="Challenge window (h)">
-                  <input className={inputCls} value={windowH} onChange={(e) => setWindowH(e.target.value)} />
-                </Field>
-              </div>
-            </>
-          )}
+                <div className="grid grid-cols-3 gap-4">
+                  <Field label="Cover (MUSD)">
+                    <input className={inputCls} value={bondCap} onChange={(e) => setBondCap(e.target.value)} />
+                  </Field>
+                  <Field label="Valid (days)">
+                    <input className={inputCls} value={bondDays} onChange={(e) => setBondDays(e.target.value)} />
+                  </Field>
+                  <Field label="Challenge (h)">
+                    <input className={inputCls} value={windowH} onChange={(e) => setWindowH(e.target.value)} />
+                  </Field>
+                </div>
+              </>
+            )}
+          </div>
         </Card>
 
-        <Card className="flex flex-col gap-4">
-          <div className="label">Stress test</div>
-          {fit ? (
-            <>
-              <div className={`display text-5xl ${fit[0] ? "text-btc" : "text-bad"}`}>{fit[0] ? "Fits" : "Doesn't fit"}</div>
-              <p className="text-sm text-ink-300">
-                After this promise, if BTC fell {p ? Number(p.stressBps) / 100 : 40}% and every promise were called at once, the vault would sit at{" "}
-                <b className="num">{fmtRatio(fit[1])}</b> (needs ≥ {p ? fmtRatio(p.targetIcr) : "160%"}).
-              </p>
-              <p className="text-sm text-ink-400">Headroom under capacity after: {fmtMusd(fit[2], 0)} MUSD</p>
-            </>
-          ) : (
-            <p className="text-sm text-ink-400">Enter an amount.</p>
-          )}
-          {type === "rent" && (
-            <div className="rounded-[3px] bg-ink-950 p-3 text-xs text-ink-300">
-              {count || 0} × {installment || 0} MUSD, {period.label.toLowerCase()}. If a payment is more than {period.grace}s late, anyone
-              (the keeper) can trigger the vault to pay it. Total cover {cover || 0} MUSD.
+        <div className="flex flex-col gap-5 lg:sticky lg:top-24 lg:self-start">
+          <Card>
+            <CardTitle right={fit ? <Badge tone={fit[0] ? "ok" : "bad"}>{fit[0] ? "Fits" : "Doesn't fit"}</Badge> : undefined}>Stress test</CardTitle>
+            {fit ? (
+              <>
+                <div className="num text-4xl font-medium tracking-tight">{fmtRatio(fit[1])}</div>
+                <p className="mt-1 text-sm text-muted">
+                  Vault ratio if BTC fell {stressPct}% and every promise were called. Needs {p ? fmtRatio(p.targetIcr) : "160%"}.
+                </p>
+                <p className="mt-3 text-xs text-subtle">Room left under capacity: {fmtMusd(fit[2], 0)} MUSD</p>
+              </>
+            ) : (
+              <p className="text-sm text-muted">Enter an amount to check it.</p>
+            )}
+          </Card>
+
+          <div className="rounded-2xl border border-line bg-canvas p-2">
+            <div className="rounded-xl border border-line bg-white p-5 shadow-card">
+              <div className="flex items-center justify-between">
+                <span className="tag">Certificate preview</span>
+                <Badge tone="ok">Active</Badge>
+              </div>
+              <div className="h-display mt-4 text-3xl">Guaranteed</div>
+              <div className="mt-1 text-sm text-muted">
+                {type === "rent" ? `${installment || 0} MUSD × ${count || 0}, ${period.label.toLowerCase()}` : `Up to ${bondCap || 0} MUSD on an uncontested claim`}
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4 text-sm">
+                <div>
+                  <div className="text-xs text-subtle">Cover</div>
+                  <div className="num">{type === "rent" ? cover || 0 : bondCap || 0} MUSD</div>
+                </div>
+                <div>
+                  <div className="text-xs text-subtle">Beneficiary</div>
+                  <div className="num">{benOk ? short(beneficiary) : "–"}</div>
+                </div>
+              </div>
             </div>
-          )}
-          <Button busy={tx.busy} disabled={!valid || !fit?.[0]} onClick={submit}>
+          </div>
+
+          <Button busy={tx.busy} disabled={!valid || !fit?.[0]} onClick={submit} className="w-full py-3">
             Make the promise
           </Button>
           <TxStatus tx={tx} />
-          <Link href="/vault" className="text-xs text-ink-400 hover:text-white">
-            ← back to vault
+          <Link href="/vault" className="text-center text-xs text-muted hover:text-fg">
+            ← Back to vault
           </Link>
-        </Card>
+        </div>
       </div>
     </div>
   )

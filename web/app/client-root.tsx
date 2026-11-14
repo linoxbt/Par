@@ -6,7 +6,7 @@ import dynamic from "next/dynamic"
 const Shell = dynamic(() => import("./shell").then((m) => m.Shell), {
   ssr: false,
   loading: () => (
-    <div className="flex min-h-screen items-center justify-center text-ink-400">
+    <div className="flex min-h-screen items-center justify-center">
       <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-btc" />
     </div>
   ),

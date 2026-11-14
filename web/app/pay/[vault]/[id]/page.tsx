@@ -70,24 +70,24 @@ export default function PayPage({ params }: { params: { vault: string; id: strin
     <div className="mx-auto flex max-w-lg flex-col gap-5">
       <PageHead eyebrow="Payer" title="Pay an installment" />
       <Card className="flex flex-col gap-3 text-sm">
-        <p className="text-ink-300">
-          Pays <span className="num text-white">{fmtMusd(c.installment)} MUSD</span> straight to <Addr a={c.beneficiary} /> through the
+        <p className="text-muted">
+          Pays <span className="num text-fg">{fmtMusd(c.installment)} MUSD</span> straight to <Addr a={c.beneficiary} /> through the
           vault, and marks the installment as paid so the guarantee doesn&apos;t fire.
         </p>
         {c.status !== 1 ? (
-          <p className="text-ink-400">This guarantee is closed.</p>
+          <p className="text-muted">This guarantee is closed.</p>
         ) : next < 0 ? (
           <p className="text-ok">All installments are settled.</p>
         ) : (
           <>
-            <div className="rounded-[3px] bg-ink-950 p-4">
-              <div className="text-xs uppercase text-ink-400">Next: installment {next + 1} of {c.count}</div>
-              <div className="display mt-1 text-5xl">{fmtMusd(c.installment)} <span className="font-mono text-sm text-ink-400">MUSD</span></div>
-              <div className="mt-1 text-xs text-ink-400">
+            <div className="rounded-2xl bg-soft p-4">
+              <div className="text-xs uppercase text-muted">Next: installment {next + 1} of {c.count}</div>
+              <div className="num mt-1 text-4xl font-medium tracking-tight">{fmtMusd(c.installment)} <span className="font-mono text-sm text-muted">MUSD</span></div>
+              <div className="mt-1 text-xs text-muted">
                 due {fmtDate(due)} · {now < due ? `in ${fmtDuration(due - now)}` : now < due + c.grace ? `late, vault pays in ${fmtDuration(due + c.grace - now)}` : "missed: the vault will cover it"}
               </div>
             </div>
-            <p className="text-xs text-ink-400">Your MUSD: {fmtMusd(bal)}</p>
+            <p className="text-xs text-muted">Your MUSD: {fmtMusd(bal)}</p>
             <div className="flex gap-2">
               {needApprove && (
                 <Button busy={tApprove.busy} onClick={() => tApprove.send({ address: p.musd, abi: erc20Abi, functionName: "approve", args: [vault, c.installment * BigInt(c.count - next)] })}>
@@ -107,7 +107,7 @@ export default function PayPage({ params }: { params: { vault: string; id: strin
           </>
         )}
       </Card>
-      <Link href={`/c/${vault}/${id}`} className="text-sm text-btc hover:underline">
+      <Link href={`/c/${vault}/${id}`} className="text-sm font-medium text-fg underline decoration-line-strong underline-offset-4 hover:decoration-btc">
         View certificate →
       </Link>
     </div>

@@ -37,7 +37,7 @@ export default function CircuitHome() {
       <PageHead
         index="03"
         eyebrow="Par Circuit"
-        title={<>Trade credit that <em className="text-btc">clears itself.</em></>}
+        title="Trade credit that clears itself"
         sub="Members log invoices; the contract nets them as they're accepted. At cycle end only net debtors pay, and a defaulter is force-settled from the clearing line in their Par vault."
       />
 
@@ -47,15 +47,15 @@ export default function CircuitHome() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {circles.map((c) => (
-            <Link key={String(c.id)} href={`/circuit/${c.id}`} className="rounded-[3px] border border-ink-700 bg-ink-900 p-5 transition hover:border-btc">
+            <Link key={String(c.id)} href={`/circuit/${c.id}`} className="rounded-2xl border border-line bg-white p-5 transition hover:border-fg">
               <div className="flex items-center justify-between">
-                <span className="font-serif text-3xl">Circle №{String(c.id)}</span>
-                <span className="text-xs text-ink-400">{c.members.length} members</span>
+                <span className="text-lg font-semibold tracking-tight">Circle #{String(c.id)}</span>
+                <span className="text-xs text-muted">{c.members.length} members</span>
               </div>
-              <p className="mt-2 text-sm text-ink-400">
+              <p className="mt-2 text-sm text-muted">
                 cycle {fmtDuration(Number(c.cycleLength))} · settle {fmtDuration(Number(c.settleWindow))}
               </p>
-              <p className="mt-1 text-xs text-ink-400">
+              <p className="mt-1 text-xs text-muted">
                 admin <Addr a={c.admin} />
               </p>
             </Link>
@@ -66,7 +66,7 @@ export default function CircuitHome() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="flex flex-col gap-4">
           <CardTitle index="01">Start a circle</CardTitle>
-          <p className="text-sm text-ink-400">You become its admin and decide who joins (a circle is a closed trade group).</p>
+          <p className="text-sm text-muted">You become its admin and decide who joins (a circle is a closed trade group).</p>
           <Field label="Cycle">
             <select className={inputCls} value={preset} onChange={(e) => setPreset(Number(e.target.value))}>
               {PRESETS.map((p, i) => (
@@ -89,12 +89,12 @@ export default function CircuitHome() {
           </div>
           <TxStatus tx={t} />
         </Card>
-        <Card className="flex flex-col gap-3 text-sm text-ink-300">
+        <Card className="flex flex-col gap-3 text-sm text-muted">
           <CardTitle index="02">How to join</CardTitle>
           <ol className="list-decimal space-y-2 pl-5">
             <li>
               Open a vault on the{" "}
-              <Link href="/vault" className="text-btc hover:underline">
+              <Link href="/vault" className="font-medium text-fg underline decoration-line-strong underline-offset-4 hover:decoration-btc">
                 Vault page
               </Link>
               .

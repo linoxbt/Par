@@ -54,12 +54,12 @@ export default function InvoicesPage({ params }: { params: { circle: string } })
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <Link href={`/circuit/${circleId}`} className="text-xs text-ink-400 hover:text-white">
+        <Link href={`/circuit/${circleId}`} className="text-xs text-muted hover:text-fg">
           ← circle #{String(circleId)}
         </Link>
-        <h1 className="display mt-2 text-5xl">Invoices</h1>
+        <h1 className="h-display mt-2 text-4xl">Invoices</h1>
         {!isMember && <p className="text-sm text-warn">You are not a member of this circle.</p>}
-        {isMember && <p className="text-sm text-ink-400">Your clearing line available: {fmtMusd(limit, 0)} MUSD · current cycle {String(s.current ?? "")}</p>}
+        {isMember && <p className="text-sm text-muted">Your clearing line available: {fmtMusd(limit, 0)} MUSD · current cycle {String(s.current ?? "")}</p>}
       </div>
 
       {isMember && (
@@ -115,7 +115,7 @@ function InvoiceList({ title, list, me, current, onDone }: { title: string; list
   return (
     <Card className="flex flex-col gap-2">
       <CardTitle>{title}</CardTitle>
-      {list.length === 0 && <p className="text-sm text-ink-400">None.</p>}
+      {list.length === 0 && <p className="text-sm text-muted">None.</p>}
       {list.map((i) => (
         <InvoiceRow key={String(i.id)} i={i} me={me} current={current} onDone={onDone} />
       ))}
@@ -129,11 +129,11 @@ function InvoiceRow({ i, me, current, onDone }: { i: Invoice; me?: Address; curr
   const isDebtor = lc(i.debtor) === lc(me)
   const stale = current !== undefined && i.cycle !== current
   return (
-    <div className="flex flex-col gap-2 border-t border-ink-800 py-2 text-sm">
+    <div className="flex flex-col gap-2 border-t border-line py-2 text-sm">
       <div className="flex items-center justify-between">
         <div>
-          <span className="num text-white">{fmtMusd(i.amount)} MUSD</span>{" "}
-          <span className="text-ink-400">
+          <span className="num text-fg">{fmtMusd(i.amount)} MUSD</span>{" "}
+          <span className="text-muted">
             #{String(i.id)} · {isDebtor ? "from" : "to"} <Addr a={isDebtor ? i.creditor : i.debtor} /> · cycle {String(i.cycle)}
           </span>
         </div>
