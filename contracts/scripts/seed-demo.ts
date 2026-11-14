@@ -8,7 +8,12 @@
 //
 // Env: DEMO_BTC (per vault, default 1 local / 0.1 testnet), DEMO_SEED (default 1800),
 //      DEMO_CHUNK (invoice chunk, default 100), DEMO_LINE (clearing line cap, default 1.5 x chunk),
-//      DEMO_CYCLE (600), DEMO_WINDOW (60)
+//      DEMO_CYCLE (600), DEMO_WINDOW (60), DEMO_LINE_DAYS (line expiry, default 60),
+//      CIRCLE (resume an existing circle instead of creating a new one)
+//
+// Membership is consent-based: the admin invites each shop with a specific vault + line
+// (addMember) and the shop accepts (join). A clearing line can back only one circle, so every
+// new circle gets fresh lines; unbound lines left over from an interrupted run are reused.
 import fs from "fs"
 import path from "path"
 import { ethers, network } from "hardhat"
@@ -29,10 +34,23 @@ async function main() {
   const line = ethers.parseEther(process.env.DEMO_LINE || String(Math.ceil(chunk * 1.5)))
   const cycle = Number(process.env.DEMO_CYCLE || 600)
   const window = Number(process.env.DEMO_WINDOW || 60)
+  const lineDays = Number(process.env.DEMO_LINE_DAYS || 60)
 
   const factory = await ethers.getContractAt("ParFactory", dep.ParFactory)
   const circuit = await ethers.getContractAt("ParCircuit", dep.ParCircuit)
-  const expiry = Math.floor(Date.now() / 1000) + 86400 * 30
+  const now = (await ethers.provider.getBlock("latest"))!.timestamp
+  const expiry = now + 86400 * lineDays
+  // A line must outlive the current cycle's settlement deadline (close + window); demand a day more.
+  const minExpiry = BigInt(now + cycle + window + 86400)
+
+  // Resume an existing circle (CIRCLE=<id>) or create a fresh one up front, so shops join it below.
+  let circleId: bigint
+  if (process.env.CIRCLE !== undefined) circleId = BigInt(process.env.CIRCLE)
+  else {
+    circleId = await circuit.nextCircleId()
+    await (await circuit.connect(admin).createCircle(cycle, window)).wait()
+  }
+  console.log(`circle #${circleId} (cycle ${cycle}s, settle window ${window}s)`)
 
   const shops = [
     { name: "importer", s: importer },
@@ -58,10 +76,22 @@ async function main() {
       const gasLimit = await pad(vault.connect(s).openTrove.estimateGas(seed, Z, Z, { value: btc }))
       await (await vault.connect(s).openTrove(seed, Z, Z, { value: btc, gasLimit })).wait()
     }
+    const member = await circuit.members(circleId, s.address)
     let lineId = -1n
-    for (let i = 0n; i < (await vault.nextId()); i++) {
-      const [kind, status, beneficiary] = await vault.commitmentInfo(i)
-      if (Number(kind) === 2 && Number(status) === 1 && beneficiary.toLowerCase() === dep.ParCircuit.toLowerCase()) lineId = i
+    if (member.active && member.vault.toLowerCase() === addr.toLowerCase()) lineId = member.lineId // already joined
+    else {
+      // reuse an active, long-enough line to the circuit that backs no circle yet
+      for (let i = 0n; i < (await vault.nextId()); i++) {
+        const [kind, status, beneficiary, , , exp] = await vault.commitmentInfo(i)
+        if (
+          Number(kind) === 2 &&
+          Number(status) === 1 &&
+          beneficiary.toLowerCase() === dep.ParCircuit.toLowerCase() &&
+          exp >= minExpiry &&
+          !(await circuit.lineBound(addr, i))
+        )
+          lineId = i
+      }
     }
     if (lineId < 0n) {
       lineId = await vault.nextId()
@@ -73,12 +103,18 @@ async function main() {
     console.log(`${name}: ${s.address} vault ${addr} line #${lineId}`)
   }
 
-  const circleId = await circuit.nextCircleId()
-  await (await circuit.connect(admin).createCircle(cycle, window)).wait()
+  // Admin invites, shop joins (skipping whatever an earlier run already did).
   for (let i = 0; i < 3; i++) {
-    await (await circuit.connect(admin).addMember(circleId, shops[i].s.address, vaults[i], lineIds[i])).wait()
+    const { name, s } = shops[i]
+    const m = await circuit.members(circleId, s.address)
+    if (m.active && m.vault.toLowerCase() === vaults[i].toLowerCase() && m.lineId === lineIds[i]) continue
+    const inv = await circuit.invites(circleId, s.address)
+    if (!(inv.open && inv.vault.toLowerCase() === vaults[i].toLowerCase() && inv.lineId === lineIds[i])) {
+      await (await circuit.connect(admin).addMember(circleId, s.address, vaults[i], lineIds[i])).wait()
+    }
+    await (await circuit.connect(s).join(circleId, vaults[i], lineIds[i])).wait()
+    console.log(`${name} joined circle #${circleId} with line #${lineIds[i]}`)
   }
-  console.log(`circle #${circleId} (cycle ${cycle}s, settle window ${window}s)`)
 
   await postGraph(circuit, circleId, shops, chunk)
   const cyc = await circuit.currentCycle(circleId)

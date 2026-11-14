@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ParVault} from "./ParVault.sol";
+import {ParFactory} from "./ParFactory.sol";
 
 /// @title ParCircuit
 /// @notice Trade-credit clearing for a closed group of businesses ("circle").
@@ -66,6 +67,8 @@ contract ParCircuit is ReentrancyGuard {
     }
 
     IERC20 public immutable musd;
+    /// @notice Only vaults cloned by this factory can back a clearing line (no look-alike contracts).
+    ParFactory public immutable factory;
 
     uint256 public nextCircleId;
     uint256 public nextInvoiceId;
@@ -121,9 +124,11 @@ contract ParCircuit is ReentrancyGuard {
     error LineInUse();
     error HasObligations();
     error LineExpiresTooSoon(uint256 expiry, uint256 needed);
+    error NotParVault();
 
-    constructor(IERC20 _musd) {
-        musd = _musd;
+    constructor(ParFactory _factory) {
+        factory = _factory;
+        musd = IERC20(_factory.musd());
     }
 
     // ---------------- Circles & members ----------------
@@ -183,6 +188,7 @@ contract ParCircuit is ReentrancyGuard {
 
     function _checkLine(uint256 circleId, address member, address vault, uint256 lineId) internal view {
         Circle storage c = circles[circleId];
+        if (!factory.isVault(vault)) revert NotParVault();
         if (!c.exists || ParVault(payable(vault)).owner() != member) revert BadParams();
         (ParVault.Kind kind, ParVault.CStatus status, address beneficiary,,, uint64 expiry) =
             ParVault(payable(vault)).commitmentInfo(lineId);

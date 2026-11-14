@@ -49,6 +49,20 @@ export async function postGraph(
       start = (i + 1) % GRAPH.length
     }
   }
+  // Preflight: a shop's line must cover everything it still owes across ALL unsettled cycles
+  // (the keeper force-settles after each settle window) plus one chunk, and must outlive this
+  // cycle's settlement deadline. Lines cannot be shared between circles.
+  for (let i = 0; i < shops.length && left.some((x) => x > 0); i++) {
+    const m = await circuit.members(circleId, addrs[i])
+    if (!m.active) throw new Error(`${shops[i].name} is not an active member of circle ${circleId} (invite + join first)`)
+    const headroom = await circuit.lineHeadroom(circleId, addrs[i])
+    if (headroom < ethers.parseEther(String(chunk))) {
+      console.warn(
+        `warning: ${shops[i].name} has ${ethers.formatEther(headroom)} MUSD line headroom (< chunk ${chunk}); ` +
+          `earlier cycles may still be unsettled (is the keeper running?) or the line is spent/expired`,
+      )
+    }
+  }
   while (left.some((x) => x > 0)) {
     for (let k = 0; k < GRAPH.length; k++) {
       const i = (start + k) % GRAPH.length

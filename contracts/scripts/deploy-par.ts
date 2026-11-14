@@ -10,8 +10,14 @@ async function main() {
   const A = MUSD_ADDRESSES[net]
   if (!A) throw new Error(`No MUSD addresses for network ${network.name}; use --network matsnet|mezo`)
 
+  // Refuse to deploy if the RPC is not the chain this network name claims to be.
+  const chainId = Number((await ethers.provider.getNetwork()).chainId)
+  if (chainId !== A.chainId) {
+    throw new Error(`chainId mismatch: --network ${network.name} expects ${A.chainId}, RPC reports ${chainId}`)
+  }
+
   const [deployer] = await ethers.getSigners()
-  console.log("deployer", deployer.address)
+  console.log("deployer", deployer.address, "chainId", chainId)
 
   const Factory = await ethers.getContractFactory("ParFactory")
   const factory = await Factory.deploy(A.BorrowerOperations, A.TroveManager, A.PriceFeed, A.MUSD, STRESS_BPS, TARGET_ICR)
@@ -21,7 +27,7 @@ async function main() {
   console.log("ParVault implementation", await factory.implementation())
 
   const Circuit = await ethers.getContractFactory("ParCircuit")
-  const circuit = await Circuit.deploy(A.MUSD)
+  const circuit = await Circuit.deploy(await factory.getAddress())
   await circuit.waitForDeployment()
   console.log("ParCircuit", await circuit.getAddress())
 

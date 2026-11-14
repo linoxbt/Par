@@ -61,7 +61,7 @@ describe("Par", () => {
       TARGET_ICR,
     )
     const C = await ethers.getContractFactory("ParCircuit")
-    circuit = await C.deploy(await contracts.musd.getAddress())
+    circuit = await C.deploy(await factory.getAddress())
 
     // background system debt so TCR is realistic
     await openTrove(contracts, { musdAmount: "100000", ICR: "300", sender: whale.wallet })

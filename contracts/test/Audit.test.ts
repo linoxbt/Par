@@ -55,7 +55,7 @@ describe("Par audit regressions", () => {
       if (skipClosed?.has(i)) continue
       const c = await vault.getCommitment(i)
       expect(c.paidOut).to.be.lessThanOrEqual(c.cap)
-      if (Number(c.status) === 1) sum += c.cap - c.paidOut
+      if (Number(c.status) === 1) sum += (c.cap as bigint) - (c.paidOut as bigint)
       else skipClosed?.add(i) // Closed is terminal
     }
     expect(await vault.reserved()).to.equal(sum)
@@ -71,7 +71,7 @@ describe("Par audit regressions", () => {
       STRESS_BPS,
       TARGET_ICR,
     )
-    circuit = await (await ethers.getContractFactory("ParCircuit")).deploy(await contracts.musd.getAddress())
+    circuit = await (await ethers.getContractFactory("ParCircuit")).deploy(await factory.getAddress())
     cAddr = await circuit.getAddress()
     await openTrove(contracts, { musdAmount: "100000", ICR: "300", sender: whale.wallet })
   })
@@ -591,6 +591,15 @@ describe("Par audit regressions", () => {
     // the old owner can no longer take on obligations against the transferred vault
     await circuit.connect(bob.wallet).createInvoice(0, alice.address, to1e18("10"), ethers.id("x"))
     await expect(circuit.connect(alice.wallet).acceptInvoice(0)).to.be.revertedWithCustomError(circuit, "NotMember")
+  })
+
+  it("only vaults cloned by the Par factory can back a clearing line (no look-alike contracts)", async () => {
+    expect(await circuit.factory()).to.equal(await factory.getAddress())
+    expect(await circuit.musd()).to.equal(await contracts.musd.getAddress())
+    await circuit.connect(alice.wallet).createCircle(600, 60)
+    // any contract that is not a factory clone is rejected before its answers are trusted
+    await expect(circuit.connect(alice.wallet).addMember(0, bob.address, cAddr, 0)).to.be.revertedWithCustomError(circuit, "NotParVault")
+    await expect(circuit.connect(alice.wallet).addMember(0, bob.address, await contracts.musd.getAddress(), 0)).to.be.revertedWithCustomError(circuit, "NotParVault")
   })
 
   it("L5d: membership is consent-based; removal and re-pointing need zero exposure", async () => {

@@ -20,7 +20,7 @@ async function main() {
     STRESS_BPS,
     TARGET_ICR,
   )
-  const circuit = await (await ethers.getContractFactory("ParCircuit")).deploy(musd)
+  const circuit = await (await ethers.getContractFactory("ParCircuit")).deploy(await factory.getAddress())
   const factoryBlock = (await factory.deploymentTransaction()!.wait())!.blockNumber
 
   // background system debt so TCR is realistic
