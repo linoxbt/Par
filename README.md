@@ -85,9 +85,11 @@ docs/demo.md           2:30 demo script and judge Q&A
 
 | Contract                | Testnet (matsnet, 31611) |
 | ----------------------- | ------------------------ |
-| ParFactory              | _not deployed yet_       |
-| ParVault implementation | _not deployed yet_       |
-| ParCircuit              | _not deployed yet_       |
+| ParFactory              | [`0x383795B16eFc89E27ab9785b283061C76eF30297`](https://explorer.test.mezo.org/address/0x383795B16eFc89E27ab9785b283061C76eF30297#code) (verified) |
+| ParVault implementation | [`0xc8a1BcFfb39B1D9DAC0c8AF88ccF79c939164409`](https://explorer.test.mezo.org/address/0xc8a1BcFfb39B1D9DAC0c8AF88ccF79c939164409) |
+| ParCircuit              | [`0xF14835BF078E532e9743F7e8346174b5F2910Ec2`](https://explorer.test.mezo.org/address/0xF14835BF078E532e9743F7e8346174b5F2910Ec2#code) (verified) |
+
+Deployed at block 16,777,736 (see `contracts/deployments/matsnet.json`).
 
 Par integrates with the official MUSD deployment (`@mezo-org/musd-contracts@1.1.0`):
 BorrowerOperations `0xCdF7028ceAB81fA0C6971208e83fa7872994beE5`, TroveManager
