@@ -13,7 +13,7 @@ import {
   useWriteContract,
 } from "wagmi"
 import { parCircuitAbi, parFactoryAbi, parVaultAbi } from "./abi"
-import { CIRCUIT, FACTORY, FACTORY_BLOCK, INTEREST_RATE_MANAGER, NETWORK } from "./config"
+import { CIRCUIT, FACTORY, FACTORY_BLOCK, INTEREST_RATE_MANAGER, MUSD_DEFAULTS, NETWORK } from "./config"
 import { borrowerOpsAbi, erc20Abi, interestRateManagerAbi, priceFeedAbi, troveManagerAbi } from "./mezoAbi"
 
 const ZERO = "0x0000000000000000000000000000000000000000" as Address
@@ -54,7 +54,17 @@ export function useProtocol() {
     allowFailure: false,
     query: { staleTime: Infinity, enabled: FACTORY !== ZERO },
   })
-  if (!data) return undefined
+  if (!data) {
+    // Par not deployed (or not configured): still read live market data from the official MUSD contracts.
+    const d = FACTORY === ZERO ? MUSD_DEFAULTS[NETWORK] : undefined
+    if (!d) return undefined
+    return {
+      ...d,
+      stressBps: 4000n,
+      targetIcr: 1_600_000_000_000_000_000n,
+      interestRateManager: INTEREST_RATE_MANAGER ?? d.borrowerOps,
+    }
+  }
   const [musd, priceFeed, troveManager, borrowerOps, stressBps, targetIcr] = data
   return {
     musd,

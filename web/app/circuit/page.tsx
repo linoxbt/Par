@@ -5,11 +5,11 @@ import { useState } from "react"
 import { decodeEventLog } from "viem"
 import { useRouter } from "next/navigation"
 import { parCircuitAbi } from "@/lib/abi"
-import { CIRCUIT } from "@/lib/config"
+import { CIRCUIT, CONFIGURED } from "@/lib/config"
 import { useCircles } from "@/lib/circuit"
 import { fmtDuration } from "@/lib/format"
 import { useMe, useTx } from "@/lib/hooks"
-import { Addr, Button, Card, CardTitle, Empty, Field, PageHead, TxStatus, inputCls } from "@/components/ui"
+import { Addr, Button, Card, CardTitle, Empty, Field, NotDeployed, PageHead, TxStatus, inputCls } from "@/components/ui"
 
 const PRESETS = [
   { label: "Weekly (2-day settle)", cycle: 7 * 86400, window: 2 * 86400 },
@@ -41,7 +41,8 @@ export default function CircuitHome() {
         sub="Members log invoices; the contract nets them as they're accepted. At cycle end only net debtors pay, and a defaulter is force-settled from the clearing line in their Par vault."
       />
 
-      {circles.length === 0 ? (
+      {!CONFIGURED && <NotDeployed />}
+      {!CONFIGURED ? null : circles.length === 0 ? (
         <Empty>No circles yet.</Empty>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -78,7 +79,7 @@ export default function CircuitHome() {
           <div>
             <Button
               busy={t.busy}
-              disabled={!isConnected}
+              disabled={!isConnected || !CONFIGURED}
               onClick={() =>
                 t.send({ address: CIRCUIT, abi: parCircuitAbi, functionName: "createCircle", args: [BigInt(PRESETS[preset].cycle), BigInt(PRESETS[preset].window)] })
               }

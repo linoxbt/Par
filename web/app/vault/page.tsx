@@ -7,11 +7,11 @@ import { formatEther, parseEther, type Address } from "viem"
 import { useBalance, useReadContract, useSendTransaction, useWaitForTransactionReceipt } from "wagmi"
 import { ConnectButton } from "@rainbow-me/rainbowkit"
 import { parFactoryAbi, parVaultAbi } from "@/lib/abi"
-import { CIRCUIT, FACTORY, addrUrl } from "@/lib/config"
+import { CIRCUIT, CONFIGURED, FACTORY, addrUrl } from "@/lib/config"
 import { fmtBps, fmtBtc, fmtDate, fmtMusd, fmtPct, fmtRatio, fmtUsd, short, toNum } from "@/lib/format"
 import { KIND_LABEL, errorText, useChainNow, useCommitments, useMarket, useMe, useProtocol, useTx, useVault, useVaultsOf } from "@/lib/hooks"
 import { liquidationPrice, maxDrop, openPreview } from "@/lib/risk"
-import { Addr, Badge, Button, Card, CardTitle, Empty, Field, HealthGauge, LinkButton, PageHead, Stat, TxLink, TxStatus, inputCls } from "@/components/ui"
+import { Addr, Badge, Button, Card, CardTitle, Empty, Field, HealthGauge, LinkButton, NotDeployed, PageHead, Stat, TxLink, TxStatus, inputCls } from "@/components/ui"
 
 const Z = "0x0000000000000000000000000000000000000000" as Address
 
@@ -31,6 +31,13 @@ function VaultInner() {
   const selected = (sp.get("v") as Address | null) ?? vaults[vaults.length - 1]
   const { data, refetch: refetchVault } = useVault(selected)
 
+  if (!CONFIGURED)
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHead index="01" eyebrow="Vault" title="Your vault" sub="One trove, many promises. Capacity and rate are fixed at open; health is re-checked on every action." />
+        <NotDeployed />
+      </div>
+    )
   if (!isConnected)
     return (
       <Empty>

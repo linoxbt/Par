@@ -9,7 +9,8 @@ import { ConnectButton } from "@rainbow-me/rainbowkit"
 import { parVaultAbi } from "@/lib/abi"
 import { fmtMusd, fmtRatio } from "@/lib/format"
 import { useMe, useProtocol, useTx, useVault, useVaultsOf } from "@/lib/hooks"
-import { Button, Card, Empty, Field, LinkButton, PageHead, TxStatus, inputCls } from "@/components/ui"
+import { Button, Card, Empty, Field, LinkButton, NotDeployed, PageHead, TxStatus, inputCls } from "@/components/ui"
+import { CONFIGURED } from "@/lib/config"
 
 const PERIODS = [
   { label: "Monthly", sec: 30 * 86400, grace: 3 * 86400 },
@@ -74,6 +75,13 @@ function Builder() {
     }
   })
 
+  if (!CONFIGURED)
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHead index="02" eyebrow="Guarantee builder" title={<>Make a <em className="text-btc">promise.</em></>} />
+        <NotDeployed />
+      </div>
+    )
   if (!isConnected)
     return (
       <Empty>

@@ -43,6 +43,23 @@ export const INTEREST_RATE_MANAGER = process.env.NEXT_PUBLIC_INTEREST_RATE_MANAG
   ? addr(process.env.NEXT_PUBLIC_INTEREST_RATE_MANAGER)
   : IRM[NETWORK]
 
+/** Official MUSD deployments (@mezo-org/musd-contracts@1.1.0). Used for market data even before Par is deployed. */
+export const MUSD_DEFAULTS: Record<Network, { priceFeed: Address; troveManager: Address; borrowerOps: Address; musd: Address } | undefined> = {
+  testnet: {
+    priceFeed: "0x86bCF0841622a5dAC14A313a15f96A95421b9366",
+    troveManager: "0xE47c80e8c23f6B4A1aE41c34837a0599D5D16bb0",
+    borrowerOps: "0xCdF7028ceAB81fA0C6971208e83fa7872994beE5",
+    musd: "0x118917a40FAF1CD7a13dB0Ef56C86De7973Ac503",
+  },
+  mainnet: {
+    priceFeed: "0xc5aC5A8892230E0A3e1c473881A2de7353fFcA88",
+    troveManager: "0x94AfB503dBca74aC3E4929BACEeDfCe19B93c193",
+    borrowerOps: "0x44b1bac67dDA612a41a58AAf779143B181dEe031",
+    musd: "0xdD468A1DDc392dcdbEf6db6e34E89AA338F9F186",
+  },
+  local: undefined,
+}
+
 export const txUrl = (h: string) => (EXPLORER ? `${EXPLORER}/tx/${h}` : "#")
 export const addrUrl = (a: string) => (EXPLORER ? `${EXPLORER}/address/${a}` : "#")
 

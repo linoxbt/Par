@@ -194,3 +194,16 @@ export function CardTitle({ index, children, right }: { index?: string; children
     </div>
   )
 }
+
+/** Shown on app pages until NEXT_PUBLIC_FACTORY / NEXT_PUBLIC_CIRCUIT point at a Par deployment. */
+export function NotDeployed() {
+  return (
+    <div className="rounded-[3px] border border-btc/40 bg-btc/10 p-6">
+      <div className="eyebrow">Testnet deployment pending</div>
+      <p className="mt-3 max-w-2xl text-ink-300">
+        Par&apos;s contracts aren&apos;t on Mezo testnet yet, so vaults, guarantees and circles can&apos;t be created from this site today. The live market data
+        above comes straight from Mezo&apos;s MUSD contracts. To try the full flow now, run it locally with <span className="num text-white">./scripts/dev-local.sh</span>.
+      </p>
+    </div>
+  )
+}
