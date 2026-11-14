@@ -8,7 +8,7 @@ import { parVaultAbi } from "@/lib/abi"
 import { erc20Abi } from "@/lib/mezoAbi"
 import { fmtDate, fmtDuration, fmtMusd, parseId } from "@/lib/format"
 import { useChainNow, useCommitment, useMe, useProtocol, useTx } from "@/lib/hooks"
-import { Addr, Button, Card, Empty, PageHead, Problem, TxStatus } from "@/components/ui"
+import { Addr, Button, Card, Empty, PageHead, ParVaultGate, Problem, TxStatus } from "@/components/ui"
 
 const Z = "0x0000000000000000000000000000000000000000" as Address
 
@@ -20,7 +20,11 @@ export default function PayPage({ params }: { params: { vault: string; id: strin
         Payment links look like /pay/&lt;vault address&gt;/&lt;number&gt;.
       </Problem>
     )
-  return <Pay vault={params.vault as Address} id={id} />
+  return (
+    <ParVaultGate vault={params.vault}>
+      <Pay vault={params.vault as Address} id={id} />
+    </ParVaultGate>
+  )
 }
 
 function Pay({ vault, id }: { vault: Address; id: bigint }) {

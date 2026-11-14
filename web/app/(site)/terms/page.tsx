@@ -118,7 +118,7 @@ export default function Terms() {
         <li>Regulatory changes affecting digital assets or the services described.</li>
       </ul>
       <p>
-        See <Link href="/security">Security</Link> and <Link href="/docs#risks">Docs → Risks</Link> for how the system works and where it can fail.
+        See <Link href="/security">Security</Link> and <Link href="/docs/learn/risk">Docs → Risk and safety</Link> for how the system works and where it can fail.
       </p>
 
       <DocH2 id="third">Third-party services</DocH2>

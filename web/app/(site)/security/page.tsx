@@ -46,7 +46,7 @@ ok = (a) && (b)                                       // the MUSD buffer is igno
             ["3", "Recovery Mode", "Add collateral from the idle BTC held in the vault as a reserve so the ratio improves, then draw. If the reserve is short, revert with the BTC needed; the keeper alerts the owner and retries."],
           ].map(([n, t, d]) => (
             <div key={n} className="rounded-2xl border border-line bg-white p-5 shadow-card">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-btc font-mono text-xs text-white">{n}</span>
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-btc font-mono text-xs text-fg">{n}</span>
               <div className="mt-4 font-medium">{t}</div>
               <p className="mt-1 text-sm text-muted">{d}</p>
             </div>

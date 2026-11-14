@@ -12,6 +12,9 @@ import { useMe, useProtocol, useTx, useVault, useVaultsOf } from "@/lib/hooks"
 import { Badge, Button, Card, CardTitle, Field, LinkButton, NotDeployed, PageHead, Segmented, TxStatus, inputCls } from "@/components/ui"
 import { CONFIGURED, chain } from "@/lib/config"
 
+/** Shortest "first due in": createScheduled reverts if start is already past when the tx is mined. */
+const MIN_FIRST_DUE = 30
+
 const PERIODS = [
   { label: "Monthly", sec: 30 * 86400, grace: 3 * 86400 },
   { label: "Weekly", sec: 7 * 86400, grace: 86400 },
@@ -30,8 +33,9 @@ function Builder() {
   const { me, isConnected } = useMe()
   const { vaults } = useVaultsOf(me)
   const sp = useSearchParams()
-  const qv = sp.get("v")
-  const vault = (qv && isAddress(qv) ? (qv as Address) : undefined) ?? vaults[vaults.length - 1]
+  // ?v= only selects among the connected wallet's own vaults; any other address is ignored.
+  const qv = sp.get("v")?.toLowerCase()
+  const vault: Address | undefined = vaults.find((x) => x.toLowerCase() === qv) ?? vaults[vaults.length - 1]
   const pc = usePublicClient({ chainId: chain.id })
   const { data: v } = useVault(vault)
   const p = useProtocol()
@@ -53,7 +57,8 @@ function Builder() {
   const capWei = (type === "rent" ? parseAmount(cover) : parseAmount(bondCap)) ?? 0n
   const instWei = parseAmount(installment)
   const countN = parseIntSafe(count, { min: 1, max: 1000 })
-  const startInN = startIn.trim() ? parseIntSafe(startIn, { min: 0, max: 10 * 365 * 86400 }) : undefined
+  // The contract needs start >= block time at inclusion; leave room for signing and mining.
+  const startInN = startIn.trim() ? parseIntSafe(startIn, { min: MIN_FIRST_DUE, max: 10 * 365 * 86400 }) : undefined
   const bondDaysN = parseIntSafe(bondDays, { min: 1, max: 3650 })
   const windowSec = /^\d+(\.\d+)?$/.test(windowH.trim()) ? Math.round(Number(windowH) * 3600) : undefined
   const { data: fit } = useReadContract({
@@ -127,10 +132,12 @@ function Builder() {
   const benOk = isAddress(beneficiary)
   const prinOk = !principal.trim() || isAddress(principal)
   const prinAddr = (principal.trim() ? principal : me) as Address
-  const isOwner = !v?.owner || lc(v.owner) === lc(me)
+  const isOwner = !!v?.owner && !!me && lc(v.owner) === lc(me)
   const capTooBig = type === "rent" && instWei !== undefined && countN !== undefined && capWei > instWei * BigInt(countN)
   const arbOk = isAddress(arbiter) && lc(arbiter) !== lc(v?.owner ?? me) && lc(arbiter) !== lc(beneficiary) && lc(arbiter) !== lc(prinAddr)
-  const problem = !isOwner
+  const problem = !v?.owner
+    ? "Checking the vault…"
+    : !isOwner
     ? "Only the vault owner can make promises from this vault."
     : beneficiary && !benOk
       ? "The beneficiary isn't a valid address."
@@ -144,7 +151,7 @@ function Builder() {
               : countN === undefined
                 ? "Number of installments must be a whole number from 1 to 1000."
                 : startIn.trim() && startInN === undefined
-                  ? "First due must be a whole number of seconds."
+                  ? `First due must be a whole number of seconds, at least ${MIN_FIRST_DUE} (time to sign and confirm).`
                   : capTooBig
                     ? "Cover cap can't exceed installment × count."
                     : undefined

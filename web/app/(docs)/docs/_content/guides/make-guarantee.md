@@ -18,12 +18,12 @@ The installment in MUSD and the number of installments.
 @step Cover cap
 The most the vault will ever pay in total. It can be less than the full schedule, for example three months of a twelve-month lease. It cannot exceed installment × count.
 @step First due date
-By default the first installment is due one period from now (30 s for the demo schedule). You can set it in seconds. It cannot be in the past.
+By default the first installment is due one period from now (60 s for the demo schedule). You can set it in seconds; the app requires at least 30 s so the start is still in the future when the transaction is mined (the contract rejects a start in the past).
 @step Review and create
 The summary shows the stress test. If it passes, sign. The app calls `createScheduled(beneficiary, principal, installment, start, period, grace, count, coverCap, expiry)`.
 :::
 
-The app sets the expiry so it covers every installment plus its grace period, with 7 days of margin (600 s for the demo schedule). The contract requires the expiry to be later than the last due time plus grace, so every installment can still be triggered.
+The app sets the expiry so it covers every installment plus its grace period, with 7 days of margin (600 s for the demo schedule). The contract requires the expiry to be at least 300 s (`MIN_TRIGGER_WINDOW`) after the last due time plus grace, so the last installment can still be triggered.
 
 ## Claim bond
 
@@ -33,7 +33,7 @@ The beneficiary, who can file claims.
 @step Principal
 The party whose performance is bonded. They can dispute claims. Defaults to you.
 @step Arbiter
-An address both sides trust to decide disputed claims. It cannot be you (the owner) or the beneficiary. Agree on it before you create the bond.
+An address both sides trust to decide disputed claims. It cannot be you (the owner), the beneficiary or the principal. Agree on it before you create the bond.
 @step Cover, validity and challenge window
 Cover in MUSD, how many days the bond is valid, and the challenge window in hours. The contract requires a window of at least 60 seconds.
 @step Review and create

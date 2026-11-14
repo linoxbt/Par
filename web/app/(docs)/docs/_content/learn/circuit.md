@@ -23,6 +23,8 @@ Joining takes two signatures. The circle admin **invites** a member with a speci
 
 A member can leave, or the admin can remove them, once they owe nothing and have a zero net in the current and previous cycle.
 
+The admin can also **suspend** a member (for example, a defaulter) with `setSuspended(circleId, member, true)`. A suspended member can't create or accept invoices, and nobody can bill them (`Suspended`), but they can still settle, be force-settled and claim what they are owed. `suspended(circleId, member)` reads the flag; `MemberSuspended` is emitted on every change.
+
 ## The cycle
 
 :::flow
@@ -60,6 +62,6 @@ The settle window can never exceed the cycle length.
 
 ## Why it is safe for creditors
 
-Every obligation the circuit records fits inside a clearing line that already passed the vault's [stress test](/docs/learn/risk#the-stress-test), and a line can only back one membership, so it is never promised twice. If a debtor disappears, the keeper force-settles them after the window and their vault pays through the normal payout waterfall.
+Every obligation the circuit records fits inside a clearing line that already passed the vault's [stress test](/docs/learn/risk#the-stress-test), and a line can only back one membership, so it is never promised twice. New debt is only booked on a line while it is live, but debt booked before expiry stays drawable after it: an expired line can't be closed while the circuit is still owed on it (`LineOwed`). If a debtor disappears, the keeper force-settles them after the window and their vault pays through the normal payout waterfall.
 
 See [Join a circle and post invoices](/docs/guides/join-circle) and [Settle a cycle](/docs/guides/settle-cycle) for the step-by-step flows.

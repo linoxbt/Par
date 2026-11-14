@@ -7,7 +7,7 @@ A guarantee is a commitment in your vault that pays a named beneficiary if a pro
 | Owner | You, the vault owner | Creates the guarantee. Can dispute claims. Cannot cancel it. |
 | Beneficiary | Landlord, supplier, client | Receives payouts. Files claims on a bond. Can release the guarantee early. |
 | Principal / payer | Tenant, buyer, contractor | Pays installments. Can dispute claims on a bond. Defaults to you. |
-| Arbiter | Someone both sides trust (bonds only). Cannot be the owner or the beneficiary. | Approves or rejects a disputed claim within 7 days. |
+| Arbiter | Someone both sides trust (bonds only). Cannot be the owner, the beneficiary or the principal. | Approves or rejects a disputed claim within 7 days. |
 | Anyone | Usually the keeper | Triggers a missed installment, executes an undisputed (or unresolved) claim, closes an expired guarantee. |
 
 ## Installment guarantees
@@ -22,7 +22,7 @@ Use these for rent, buy-now-pay-later and supplier terms: a fixed amount due on 
 | Period | Seconds between installments. The app offers monthly (30 days), weekly (7 days) and a 2-minute demo. |
 | Grace | Seconds after the due time before a miss can be triggered. The app uses 3 days, 1 day and 10 seconds respectively. |
 | Cover cap | The most the vault will ever pay in total. At most installment × count. |
-| Expiry | Must be later than the last due time plus grace, so every installment can be triggered. After expiry, no more misses can be triggered and anyone can close the guarantee. |
+| Expiry | At least 300 s (`MIN_TRIGGER_WINDOW`) after the last due time plus grace, so the last installment can actually be triggered. After expiry, no more misses can be triggered and anyone can close the guarantee. |
 
 **How it pays:** the payer pays each installment through the vault (`payInstallment`), which sends the MUSD straight to the beneficiary and marks it settled. If an installment is still unsettled after `due + grace`, anyone can call `triggerMissed`, and the vault pays that installment (or whatever is left of the cover cap, if less) through the [payout waterfall](/docs/learn/how-it-works#payout-waterfall). Each installment can be settled once, either way.
 
@@ -38,7 +38,7 @@ Use these for performance bonds, deposits and anything where a breach is a judge
 | --- | --- |
 | Cover (cap) | The most the vault will pay across all claims. |
 | Principal | The party whose performance is bonded. May dispute claims. |
-| Arbiter | Decides disputed claims. Must not be the owner or the beneficiary. Agree on it before you create the bond. |
+| Arbiter | Decides disputed claims. Must not be the owner, the beneficiary or the principal. Agree on it before you create the bond. |
 | Challenge window | Seconds after a claim is filed during which it can be disputed. At least 60 seconds. |
 | Expiry | After this, no new claims can be filed. |
 
@@ -56,7 +56,7 @@ Only one claim can be open at a time. If the arbiter does not decide within **7 
 ## Closing and expiry
 
 - The **beneficiary** can release a guarantee at any time with `closeCommitment`. The unused cover is returned to the vault's capacity.
-- After **expiry**, anyone can close it.
+- After **expiry**, anyone can close it. Exception: an expired Circuit clearing line can't be closed while the circuit is still owed on it (`LineOwed()`); debt booked while the line was live stays drawable after expiry.
 - Nobody can close it while a claim is open (`ClaimOpen()`): the open claim must be executed or resolved first.
 - A guarantee closes automatically when its cap has been paid out in full.
 

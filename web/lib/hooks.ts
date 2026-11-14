@@ -109,6 +109,22 @@ export function useVaultsOf(owner?: Address) {
   }
 }
 
+/**
+ * Whether `vault` was created by the Par factory. Anyone can deploy a contract that answers
+ * getCommitment() with made-up numbers, so certificate/pay pages must check this before showing
+ * any guarantee data. `isVault` is undefined while loading (or if the read failed: see `error`).
+ */
+export function useIsParVault(vault?: Address) {
+  const q = useReadContract({
+    address: FACTORY,
+    abi: parFactoryAbi,
+    functionName: "isVault",
+    args: [vault ?? ZERO],
+    query: { enabled: !!vault && FACTORY !== ZERO, staleTime: Infinity },
+  })
+  return { isVault: q.data as boolean | undefined, error: q.error, configured: FACTORY !== ZERO }
+}
+
 export type VaultState = ReturnType<typeof useVault>["data"]
 
 export function useVault(vault?: Address) {
@@ -215,7 +231,9 @@ export type DecodedLog = { eventName: string; args: any; transactionHash: string
 /**
  * Event logs for one contract since the factory block (light indexer, spec 6.5).
  * Mezo's RPC rejects getLogs ranges over 10,000 blocks, so this scans in chunks and caches per
- * address, then only fetches new blocks on each poll. Errors are surfaced, never swallowed into [].
+ * address, then only fetches new blocks on each poll. Each chunk is published as it lands (a long
+ * first scan shows history filling in), and a poll is skipped while the previous scan is still
+ * running. Errors are surfaced, never swallowed into [].
  */
 const LOG_CHUNK = 9_000n
 const logCache = new Map<string, { to: bigint; logs: DecodedLog[] }>()
@@ -228,16 +246,22 @@ export function useLogs(address: Address | undefined, abi: Abi, refreshKey = 0) 
   useEffect(() => {
     if (!pc || !address) return
     let dead = false
+    let running = false
     const key = address.toLowerCase()
+    const cachedNow = logCache.get(key)
+    setState(cachedNow ? { logs: cachedNow.logs } : {})
     const load = async () => {
+      if (running) return // previous scan still in flight: don't start a second, overlapping one
+      running = true
       try {
         const head = await pc.getBlockNumber()
         const cached = logCache.get(key)
         let from = cached ? cached.to + 1n : FACTORY_BLOCK
         const out = cached ? [...cached.logs] : []
-        while (from <= head) {
+        while (from <= head && !dead) {
           const to = from + LOG_CHUNK - 1n < head ? from + LOG_CHUNK - 1n : head
           const raw: Log[] = await pc.getLogs({ address, fromBlock: from, toBlock: to })
+          const before = out.length
           for (const l of raw) {
             try {
               const d = decodeEventLog({ abi, data: l.data, topics: l.topics }) as any
@@ -246,12 +270,17 @@ export function useLogs(address: Address | undefined, abi: Abi, refreshKey = 0) 
               /* event from another ABI version: skip */
             }
           }
-          logCache.set(key, { to, logs: out.slice() })
+          const snapshot = out.slice()
+          logCache.set(key, { to, logs: snapshot })
           from = to + 1n
+          // partial results: publish each chunk that added logs; the final chunk is published below
+          if (!dead && out.length > before && from <= head) setState({ logs: snapshot })
         }
-        if (!dead) setState({ logs: out })
+        if (!dead) setState({ logs: out.slice() })
       } catch (e) {
         if (!dead) setState((s) => ({ logs: s.logs, error: (e as Error)?.message?.split("\n")[0] ?? "Couldn't load history" }))
+      } finally {
+        running = false
       }
     }
     load()
@@ -364,12 +393,6 @@ export function useTx(onDone?: (receipt: any) => void) {
     done: receipt.isSuccess,
     receipt: receipt.data,
   }
-}
-
-/** True when a wallet is connected on a chain other than the app's. */
-export function useWrongChain() {
-  const { isConnected, chainId } = useAccount()
-  return isConnected && chainId !== undefined && chainId !== chain.id
 }
 
 export function useMe() {

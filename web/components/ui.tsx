@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { addrUrl, txUrl } from "@/lib/config"
 import { short } from "@/lib/format"
+import { useIsParVault } from "@/lib/hooks"
 
 export function Card({ children, className = "", pad = true }: { children: React.ReactNode; className?: string; pad?: boolean }) {
   return <div className={`rounded-2xl border border-line bg-white shadow-card ${pad ? "p-6" : ""} ${className}`}>{children}</div>
@@ -119,7 +120,7 @@ export function Button({
     variant === "primary"
       ? "bg-fg text-white hover:bg-black/80"
       : variant === "accent"
-        ? "bg-btc text-white hover:bg-btc-ink"
+        ? "bg-btc text-fg hover:bg-btc-ink hover:text-white"
         : variant === "danger"
           ? "bg-bad text-white hover:bg-bad/90"
           : "border border-line-strong bg-white text-fg hover:border-fg"
@@ -266,4 +267,33 @@ export function Problem({ title, children, action }: { title: string; children?:
       )}
     </div>
   )
+}
+
+/**
+ * Renders children only for vaults created by the Par factory (ParFactory.isVault). Any contract
+ * can mimic getCommitment(), so nothing about a guarantee is shown, and no approve/pay is offered,
+ * until the factory vouches for the address.
+ */
+export function ParVaultGate({ vault, children }: { vault: string; children: React.ReactNode }) {
+  const { isVault, error, configured } = useIsParVault(vault as `0x${string}`)
+  if (!configured)
+    return (
+      <Problem title="Par isn't deployed on this network" action={{ href: "/", label: "Back to Par" }}>
+        This guarantee can&apos;t be verified here.
+      </Problem>
+    )
+  if (isVault === false)
+    return (
+      <Problem title="This address isn't a Par vault" action={{ href: "/vault", label: "Open the app" }}>
+        {short(vault)} was not created by the Par factory, so nothing it reports is a Par guarantee. Don&apos;t rely on this link.
+      </Problem>
+    )
+  if (isVault === undefined && error)
+    return (
+      <Problem title="Couldn't verify this vault" action={{ href: "/vault", label: "Open the app" }}>
+        The network didn&apos;t answer. Reload the page to try again.
+      </Problem>
+    )
+  if (isVault === undefined) return <div className="mx-auto h-96 max-w-lg animate-pulse rounded-2xl border border-line bg-white" />
+  return <>{children}</>
 }

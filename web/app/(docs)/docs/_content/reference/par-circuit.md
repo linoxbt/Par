@@ -21,6 +21,7 @@ The constructor takes the `ParFactory`; MUSD is read from it. Only vaults create
 | `createCircle(uint64 cycleLength, uint64 settleWindow) → id` | Anyone | Caller becomes admin; genesis is now. Requires `cycleLength > 0` and `settleWindow ≤ cycleLength`. Emits `CircleCreated`. |
 | `addMember(uint256 circleId, address member, address vault, uint256 lineId)` | Admin | Creates (or replaces) an invite for `member` with this vault and line, after checking the line. Emits `MemberInvited`. |
 | `join(uint256 circleId, address vault, uint256 lineId)` | Invited member | Accepts the invite. Checks the line again, and that it is not bound to another membership. Re-pointing an existing membership requires no exposure on the old line. Emits `MemberJoined`. |
+| `setSuspended(uint256 circleId, address member, bool value)` | Admin | Suspends (or reinstates) an active member, e.g. a defaulter: no new invoices to or from them (`Suspended`). Existing obligations stay collectable (`settle`, `forceSettle`) and their credits stay claimable. Emits `MemberSuspended`. |
 | `removeMember(uint256 circleId, address member)` | Admin or the member | Only with zero `outstanding` and a zero net in the current and previous cycle. Frees the line. Emits `MemberRemoved`. |
 
 **Line checks** (at invite, at join): the vault is a factory vault (`NotParVault`); the circle exists and the member owns the vault (`BadParams`); the commitment is an active ClearingLine whose beneficiary is ParCircuit (`BadParams`); and its expiry is at least `cycleClose(current cycle) + settleWindow` (`LineExpiresTooSoon`).
@@ -29,8 +30,8 @@ The constructor takes the `ParFactory`; MUSD is read from it. Only vaults create
 
 | Function | Access | Description |
 | --- | --- | --- |
-| `createInvoice(uint256 circleId, address debtor, uint128 amount, bytes32 ref) → id` | Active member | Bills another active member in the current cycle. Emits `InvoiceCreated`. |
-| `acceptInvoice(uint256 id)` | Debtor | Same cycle only (`WrongCycle`). Updates both nets, `gross`, `totalOwed` and the debtor's `outstanding`. If the debtor ends up a net debtor: the line must live until this cycle's settle deadline (`LineExpiresTooSoon`) and `outstanding ≤ available()` (`OverLimit`). Emits `InvoiceAccepted`. |
+| `createInvoice(uint256 circleId, address debtor, uint128 amount, bytes32 ref) → id` | Active member | Bills another active member in the current cycle. Neither side may be suspended (`Suspended`). Emits `InvoiceCreated`. |
+| `acceptInvoice(uint256 id)` | Debtor | Same cycle only (`WrongCycle`); neither side may be suspended (`Suspended`). Updates both nets, `gross`, `totalOwed` and the debtor's `outstanding`. If the debtor ends up a net debtor: the line must live until this cycle's settle deadline (`LineExpiresTooSoon`) and `outstanding ≤ available()` (`OverLimit`). Emits `InvoiceAccepted`. |
 | `rejectInvoice(uint256 id)` | Debtor or creditor | Rejects a pending invoice. Emits `InvoiceRejected`. |
 
 ## Settlement
@@ -38,7 +39,7 @@ The constructor takes the `ParFactory`; MUSD is read from it. Only vaults create
 | Function | Access | Description |
 | --- | --- | --- |
 | `settle(uint256 circleId, uint64 cycle)` | Net debtor | After `cycleClose`. Pulls the owed MUSD (approve first). Late settlement is accepted, even after the cycle is final. Emits `Settled(..., false)`. |
-| `forceSettle(uint256 circleId, uint64 cycle, address debtor, address up, address lo)` | Anyone | After `cycleClose + settleWindow`. Draws the debtor's clearing line for exactly the amount owed. Emits `Settled(..., true)`. |
+| `forceSettle(uint256 circleId, uint64 cycle, address debtor, address up, address lo)` | Anyone | After `cycleClose + settleWindow`. Draws the debtor's clearing line for exactly the amount owed, even if the line has expired since the debt was booked. Emits `Settled(..., true)`. |
 | `claim(uint256 circleId, uint64 cycle)` | Net creditor | In full once `collected ≥ totalOwed`; otherwise, after `finalAt`, pro rata `credit × collected ÷ totalOwed` minus what was already claimed. Can be called again as more is collected. Emits `Claimed`, and `CycleFinalized` on the first pro-rata claim. |
 
 ## Views
@@ -55,6 +56,7 @@ The constructor takes the `ParFactory`; MUSD is read from it. Only vaults create
 | `circles(id)`, `members(circleId, member)`, `invites(circleId, member)`, `invoices(id)` | Struct getters. |
 | `net(circleId, cycle, member) → int256` | Positive receives, negative owes. |
 | `gross`, `totalOwed`, `collected` `(circleId, cycle) → uint256` | Cycle totals. |
+| `suspended(circleId, member) → bool` | Whether the admin has suspended the member. |
 | `settled(circleId, cycle, member) → bool` | Debtor paid, or creditor claimed in full. |
 | `claimed(circleId, cycle, creditor) → uint256` | What a creditor has received so far. |
 | `finalized(circleId, cycle) → bool` | Set on the first pro-rata claim. |
@@ -70,6 +72,7 @@ The constructor takes the `ParFactory`; MUSD is read from it. Only vaults create
 | `MemberInvited(uint256 indexed circleId, address indexed member, address vault, uint256 lineId)` | The admin invites a member. |
 | `MemberJoined(uint256 indexed circleId, address indexed member, address vault, uint256 lineId)` | A member accepts. |
 | `MemberRemoved(uint256 indexed circleId, address indexed member)` | A member leaves or is removed. |
+| `MemberSuspended(uint256 indexed circleId, address indexed member, bool suspended)` | The admin suspends or reinstates a member. |
 | `InvoiceCreated(uint256 indexed id, uint256 indexed circleId, address creditor, address debtor, uint256 amount, uint64 cycle, bytes32 ref)` | An invoice is created. |
 | `InvoiceAccepted(uint256 indexed id, uint256 indexed circleId, uint64 cycle)` | The debtor accepts. |
 | `InvoiceRejected(uint256 indexed id)` | Either side rejects. |
@@ -79,4 +82,4 @@ The constructor takes the `ParFactory`; MUSD is read from it. Only vaults create
 
 ## Errors
 
-`NotMember`, `NotAdmin`, `BadParams`, `WrongCycle`, `OverLimit(uint256 limit, uint256 wouldOwe)`, `NotYet`, `Done`, `NotInvited`, `LineInUse`, `HasObligations`, `LineExpiresTooSoon(uint256 expiry, uint256 needed)`, `NotParVault`. See [Errors](/docs/reference/errors).
+`NotMember`, `NotAdmin`, `BadParams`, `WrongCycle`, `OverLimit(uint256 limit, uint256 wouldOwe)`, `NotYet`, `Done`, `NotInvited`, `LineInUse`, `HasObligations`, `LineExpiresTooSoon(uint256 expiry, uint256 needed)`, `NotParVault`, `Suspended`. See [Errors](/docs/reference/errors).

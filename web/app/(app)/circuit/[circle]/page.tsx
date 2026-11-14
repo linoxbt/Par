@@ -30,7 +30,7 @@ export default function CircleBoardPage({ params }: { params: { circle: string }
 }
 
 function CircleBoard({ circleId }: { circleId: bigint }) {
-  const { invoices, refetch: refetchInv } = useInvoices(circleId)
+  const { invoices, error: invError, refetch: refetchInv } = useInvoices(circleId)
   const [picked, setPicked] = useState<bigint>()
   const now = useChainNow()
 
@@ -118,6 +118,7 @@ function CircleBoard({ circleId }: { circleId: bigint }) {
 
   return (
     <div className="flex flex-col gap-6">
+      {invError && <p className="rounded-lg bg-warn-wash px-3 py-2 text-sm text-warn">Invoices may be out of date: {invError}. Retrying…</p>}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <Link href="/circuit" className="text-xs text-muted hover:text-fg">

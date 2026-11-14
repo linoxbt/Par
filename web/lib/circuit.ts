@@ -57,6 +57,7 @@ export function useInvoices(circleId: bigint) {
   const pc = usePublicClient()
   const [tick, setTick] = useState(0)
   const [all, setAll] = useState<Invoice[]>(() => [...invCache.values()])
+  const [error, setError] = useState<string>()
   const load = useCallback(async () => {
     if (!pc) return
     try {
@@ -73,13 +74,20 @@ export function useInvoices(circleId: bigint) {
           : await Promise.all(calls.map((c) => pc.readContract(c)))
         res.forEach((r: any, j: number) => {
           const id = batch[j]
-          invCache.set(id, { id: BigInt(id), circleId: r[0], creditor: r[1], debtor: r[2], amount: r[3], cycle: r[4], status: Number(r[5]), ref: r[6] })
+          const status = Number(r[5])
+          // Status only moves forward (Pending -> Accepted/Rejected). A slow poll that started before
+          // an accept/reject must not flip a settled invoice back to Pending.
+          const prev = invCache.get(id)
+          if (prev && prev.status !== 1 && status === 1) return
+          invCache.set(id, { id: BigInt(id), circleId: r[0], creditor: r[1], debtor: r[2], amount: r[3], cycle: r[4], status, ref: r[6] })
         })
       }
       invNext = Math.max(invNext, n)
       setAll([...invCache.values()])
-    } catch {
-      /* keep the last good snapshot; next poll retries */
+      setError(undefined)
+    } catch (e) {
+      // keep the last good snapshot and say so; the next poll retries
+      setError((e as Error)?.message?.split("\n")[0] || "Couldn't load invoices")
     }
   }, [pc])
   useEffect(() => {
@@ -90,6 +98,7 @@ export function useInvoices(circleId: bigint) {
   const invoices = useMemo(() => all.filter((x) => x.circleId === circleId).sort((x, y) => Number(x.id - y.id)), [all, circleId])
   return {
     invoices,
+    error,
     refetch: async () => {
       await load()
       setTick((x) => x + 1)

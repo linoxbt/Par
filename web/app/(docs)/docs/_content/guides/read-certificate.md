@@ -5,9 +5,11 @@ Every commitment has a public certificate at `/c/<vault>/<id>`. It reads live fr
 | Status | Meaning |
 | --- | --- |
 | **Guaranteed** (Active) | The commitment is active and before expiry. A green badge means the vault passes the stress test; amber means it no longer does and the owner has been asked to top up. Existing cover is still valid. |
-| **Expired** | Past expiry. No new misses or claims can be triggered. Anyone can close it. |
-| **Paid in full** | The vault has paid out the whole cap. |
-| **Released** | Closed before the cap was paid out: released by the beneficiary, or closed after expiry. |
+| **Expired** | Past expiry. No new misses or claims can be triggered. Anyone can close it (a clearing line only once the circuit is no longer owed on it). |
+| **Paid in full** (Closed · paid in full) | The vault has paid out the whole cap. No cover remains. |
+| **Released** (Closed) | Closed before the cap was paid out: released by the beneficiary, or closed after expiry. No cover remains. |
+
+The page first checks with `ParFactory.isVault` that the address is a vault the Par factory created. If it isn't, the page says **This address isn't a Par vault** and shows nothing else: any contract could report made-up guarantee numbers.
 
 ## The numbers
 

@@ -28,7 +28,10 @@ function VaultInner() {
   const { vaults, refetch } = useVaultsOf(me)
   const sp = useSearchParams()
   const router = useRouter()
-  const selected = (sp.get("v") as Address | null) ?? vaults[vaults.length - 1]
+  // Only honour ?v= for one of the connected wallet's own vaults: a crafted link must not make a
+  // foreign contract look like "your vault" (and get BTC sent to it). Anything else is ignored.
+  const qv = sp.get("v")?.toLowerCase()
+  const selected = vaults.find((x) => x.toLowerCase() === qv) ?? vaults[vaults.length - 1]
   const { data, refetch: refetchVault } = useVault(selected)
 
   if (!CONFIGURED)
@@ -44,7 +47,7 @@ function VaultInner() {
       <div className="flex flex-col gap-8">
         <PageHead eyebrow="Vault" title="Your vault." muted="Lock BTC once, back many promises." />
         <Card className="flex flex-col items-center gap-4 py-14 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-btc text-xl text-white" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>₿</span>
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-btc text-xl text-fg" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>₿</span>
           <div className="text-lg font-medium">Connect a wallet to open your vault</div>
           <p className="max-w-md text-sm text-muted">Bitcoin wallets (Xverse, Unisat, OKX) connect through Mezo Passport. EVM wallets work too.</p>
           <WalletButton align="left" />
@@ -107,7 +110,7 @@ function Steps({ active }: { active: number }) {
         <div key={t} className={`flex items-center gap-3 rounded-2xl border p-4 ${i === active ? "border-fg bg-white shadow-card" : "border-line bg-white/60"}`}>
           <span
             className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-xs ${
-              i < active ? "bg-fg text-white" : i === active ? "bg-btc text-white" : "bg-soft text-subtle"
+              i < active ? "bg-fg text-white" : i === active ? "bg-btc text-fg" : "bg-soft text-subtle"
             }`}
           >
             {i < active ? "✓" : i + 1}
@@ -160,9 +163,14 @@ function OpenTrove({ vault, onDone }: { vault: Address; onDone: () => void }) {
   const seedWei = seed.trim() ? parseAmount(seed) : m.minNetDebt
   const collWei = parseAmount(btc) ?? 0n
   const pv = p && m.price && seedWei !== undefined ? openPreview(collWei, m.price, seedWei, p.stressBps, p.targetIcr) : undefined
-  const notOwner = !!vs?.owner && !!me && vs.owner.toLowerCase() !== me.toLowerCase()
-  const problem =
-    parseAmount(btc) === undefined
+  // Unknown owner (still loading, or a failed read) counts as not-owner: never offer to send BTC blind.
+  const ownerKnown = !!vs?.owner && !!me
+  const notOwner = !ownerKnown || vs!.owner!.toLowerCase() !== me!.toLowerCase()
+  const problem = !ownerKnown
+    ? "Checking the vault owner…"
+    : notOwner
+      ? "Only the vault owner can open its trove."
+      : parseAmount(btc) === undefined
       ? "Enter the BTC amount as a plain number, e.g. 0.25."
       : collWei === 0n
         ? "Enter how much BTC to lock."
@@ -172,11 +180,9 @@ function OpenTrove({ vault, onDone }: { vault: Address; onDone: () => void }) {
             ? "Enter the buffer as a plain number, e.g. 1800."
             : seedWei < m.minNetDebt
               ? `MUSD's minimum loan is ${fmtMusd(m.minNetDebt, 0)} MUSD.`
-              : notOwner
-                ? "Only the vault owner can open its trove."
-                : pv && pv.icr < 1_100_000_000_000_000_000n
-                  ? "Not enough BTC for this loan: the collateral ratio would be under 110%."
-                  : undefined
+              : pv && pv.icr < 1_100_000_000_000_000_000n
+                ? "Not enough BTC for this loan: the collateral ratio would be under 110%."
+                : undefined
   const walletBtc = bal ? Number(formatEther(bal.value)) : 0
   const max = bal ? Math.max(0.001, walletBtc * 0.98) : 1
   const tx = useTx(() => onDone())
@@ -223,8 +229,8 @@ function OpenTrove({ vault, onDone }: { vault: Address; onDone: () => void }) {
         <div className="mt-6 flex flex-wrap items-center gap-4">
           <Button
             busy={tx.busy}
-            disabled={!!problem}
-            onClick={() => tx.send({ address: vault, abi: parVaultAbi, functionName: "openTrove", args: [seedWei, Z, Z], value: collWei })}
+            disabled={!!problem || notOwner}
+            onClick={() => !notOwner && tx.send({ address: vault, abi: parVaultAbi, functionName: "openTrove", args: [seedWei, Z, Z], value: collWei })}
           >
             Open trove with {fmtBtc(collWei)} BTC
           </Button>
@@ -279,7 +285,7 @@ function Dashboard({ vault }: { vault: Address }) {
 
   const drop = m.price ? maxDrop(v.coll, v.debt, v.reserved, m.price) : 0
   const liq = liquidationPrice(v.coll, v.debt, v.reserved)
-  const isOwner = me?.toLowerCase() === v.owner?.toLowerCase()
+  const isOwner = !!me && !!v.owner && me.toLowerCase() === v.owner.toLowerCase()
   const refreshAll = () => {
     refetch()
     refetchC()

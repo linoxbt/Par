@@ -444,7 +444,7 @@ async function pendingClaim(vault: Address, id: bigint) {
     filedAt: r[1] as bigint,
     disputed: r[2] as boolean,
     open: r[3] as boolean,
-    disputedAt: (r[4] as bigint | undefined) ?? 0n,
+    disputedAt: (r[5] as bigint | undefined) ?? 0n, // [4] is the evidence hash
   }
 }
 

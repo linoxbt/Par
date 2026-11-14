@@ -22,7 +22,7 @@ Settle within the settle window to avoid a forced draw on your clearing line. A 
 
 ## Force-settle
 
-After `cycleClose + settleWindow`, **anyone** can call `forceSettle(circleId, cycle, debtor, up, lo)` for a net debtor who has not paid. The circuit draws the debtor's clearing line for exactly the amount owed and emits `Settled(..., true)`. The Par keeper does this automatically every 15 seconds, and anyone can do it from the members list on the circle page once the window is over.
+After `cycleClose + settleWindow`, **anyone** can call `forceSettle(circleId, cycle, debtor, up, lo)` for a net debtor who has not paid. The circuit draws the debtor's clearing line for exactly the amount owed and emits `Settled(..., true)`. This works even if the line has expired since the debt was booked: the vault keeps the line reserved, and nobody but the circuit can close it, while that debt is owed (`LineOwed`). The Par keeper does this automatically every 15 seconds, and anyone can do it from the members list on the circle page once the window is over.
 
 | Rule | Error |
 | --- | --- |

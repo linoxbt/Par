@@ -91,11 +91,11 @@ export default function Developers() {
       <DocSection n="03" title="Functions">
         <div className="grid gap-4 md:grid-cols-2">
           {[
-            ["ParVault · owner", ["openTrove(seed, up, lo) payable", "createScheduled(…) · start ≥ now", "createClaim(…) · neutral arbiter, window ≥ 60 s", "createClearingLine(circuit, cap, expiry)", "withdrawCollateral / borrow / repay", "refinance(up, lo)", "withdrawMUSDBuffer / withdrawIdleBTC", "claimCollateral()", "closeTrove()", "transferOwnership(to) → acceptOwnership()"]],
-            ["ParVault · anyone", ["topUp(up, lo) payable", "payInstallment(id, index)", "triggerMissed(id, index, up, lo)", "executeClaim(id, up, lo) · undisputed after window, disputed after 7 days", "closeCommitment(id)", "health(extra) → ok, stressedIcr, headroom", "recoveryTopUp(draw, price) → btc"]],
+            ["ParVault · owner", ["openTrove(seed, up, lo) payable", "createScheduled(…) · start ≥ now, expiry ≥ last due + grace + 300 s", "createClaim(…) · arbiter ≠ owner, beneficiary, principal · window ≥ 60 s", "createClearingLine(circuit, cap, expiry)", "withdrawCollateral / borrow / repay", "refinance(up, lo)", "withdrawMUSDBuffer / withdrawIdleBTC", "claimCollateral()", "closeTrove()", "transferOwnership(to) → acceptOwnership()"]],
+            ["ParVault · anyone", ["topUp(up, lo) payable", "payInstallment(id, index)", "triggerMissed(id, index, up, lo)", "executeClaim(id, up, lo) · undisputed after window, disputed after 7 days", "closeCommitment(id) · after expiry (beneficiary: any time); not while a claim is open or an expired line is owed (LineOwed)", "health(extra) → ok, stressedIcr, headroom", "recoveryTopUp(draw, price) → btc"]],
             ["ParVault · claim parties", ["fileClaim(id, amount, evidence) · beneficiary", "disputeClaim(id) · principal or owner", "resolveClaim(id, approve, up, lo) · arbiter, within 7 days"]],
-            ["ParCircuit · members", ["createCircle(cycleLength, settleWindow)", "addMember(circle, member, vault, lineId) · admin invites", "join(circle, vault, lineId) · member accepts", "removeMember(circle, member) · admin or member", "createInvoice(circle, debtor, amount, ref)", "acceptInvoice(id) / rejectInvoice(id)", "settle(circle, cycle)", "claim(circle, cycle)"]],
-            ["ParCircuit · anyone", ["forceSettle(circle, cycle, debtor, up, lo)", "net / gross / totalOwed / collected", "nettingEfficiencyBps(circle, cycle)", "creditLimit / lineHeadroom(circle, member)", "currentCycle / cycleClose / finalAt"]],
+            ["ParCircuit · members", ["createCircle(cycleLength, settleWindow)", "addMember(circle, member, vault, lineId) · admin invites", "join(circle, vault, lineId) · member accepts", "removeMember(circle, member) · admin or member", "setSuspended(circle, member, bool) · admin only", "createInvoice(circle, debtor, amount, ref) · not if suspended", "acceptInvoice(id) · not if suspended / rejectInvoice(id)", "settle(circle, cycle)", "claim(circle, cycle)"]],
+            ["ParCircuit · anyone", ["forceSettle(circle, cycle, debtor, up, lo) · draws the line, even after its expiry", "suspended(circle, member)", "net / gross / totalOwed / collected", "nettingEfficiencyBps(circle, cycle)", "creditLimit / lineHeadroom(circle, member)", "currentCycle / cycleClose / finalAt"]],
           ].map(([h, fns]) => (
             <div key={h as string} className="rounded-2xl border border-line bg-white p-5 shadow-card">
               <div className="text-sm font-medium">{h}</div>
@@ -118,7 +118,7 @@ ParVault   : TroveOpened(coll, seed)  CommitmentCreated(id, kind, beneficiary, c
              ClaimFiled(id, amount, evidence)  ClaimDisputed(id)  ClaimResolved(id, approved)
              Payout(id, to, amount, fromBuffer, minted)  CommitmentClosed(id, released)
              OwnershipTransferStarted(from, to)  OwnershipTransferred(from, to)  CollateralClaimed(amount)
-ParCircuit : CircleCreated  MemberInvited  MemberJoined  MemberRemoved
+ParCircuit : CircleCreated  MemberInvited  MemberJoined  MemberRemoved  MemberSuspended(circle, member, suspended)
              InvoiceCreated  InvoiceAccepted  InvoiceRejected
              Settled(circle, cycle, debtor, amount, forced)  Claimed(circle, cycle, creditor, amount)
              CycleFinalized(circle, cycle, collected, totalOwed)`}</Pre>

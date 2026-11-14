@@ -9,7 +9,7 @@
 | **Commitment** | A promise backed by the vault: Scheduled (installments), Claim (bond) or ClearingLine (Circuit). |
 | **Cap** | The most the vault will ever pay on one commitment. |
 | **Reserved** | Sum of `cap − paidOut` over all active commitments. |
-| **Expiry** | After it, a commitment cannot be triggered and anyone can close it. |
+| **Expiry** | After it, a commitment cannot be triggered and anyone can close it. A Circuit clearing line is the exception: debt booked while it was live can still be drawn, and it can't be closed while that debt is owed. |
 | **Grace** | Time after an installment's due date before a miss can be triggered. |
 | **Challenge window** | Time after a claim is filed during which it can be disputed. |
 | **Arbiter** | The address that decides disputed claims on a bond. |

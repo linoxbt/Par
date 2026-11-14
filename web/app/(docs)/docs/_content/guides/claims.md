@@ -61,5 +61,5 @@ With a 48-hour challenge window:
 If the arbiter had done nothing, anyone could execute the claim after day 8 and it would pay.
 
 :::warning Choose the arbiter carefully
-A disputed claim depends on the arbiter, and an absent arbiter means the claim pays by default. The arbiter cannot be the vault owner or the beneficiary. Pick someone both sides trust, and agree on it before the bond is created.
+A disputed claim depends on the arbiter, and an absent arbiter means the claim pays by default. The arbiter cannot be the vault owner, the beneficiary or the principal. Pick someone both sides trust, and agree on it before the bond is created.
 :::

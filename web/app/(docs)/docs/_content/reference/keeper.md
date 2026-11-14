@@ -9,7 +9,7 @@ Source: [`keeper/src/index.ts`](https://github.com/linoxbt/par/blob/main/keeper/
 | Missed installments | Scheduled commitment, index unsettled, `now > due + grace`, before expiry | `vault.triggerMissed(id, index, up, lo)` |
 | Claims | Open and undisputed after the challenge window, or disputed and unresolved past `disputedAt + 7 days` | `vault.executeClaim(id, up, lo)` |
 | Circuit defaulters | `now ≥ cycleClose + settleWindow`, net < 0, unsettled | `circuit.forceSettle(circle, cycle, debtor, up, lo)` |
-| Expired commitments | Past expiry, no open claim (on by default) | `vault.closeCommitment(id)` |
+| Expired commitments | Past expiry, no open claim; an expired clearing line the circuit is still owed on is skipped (`LineOwed`) (on by default) | `vault.closeCommitment(id)` |
 | Health watch | `health(0).ok == false` | Alert the owner (`under-reserved`) |
 | Inactive trove | Trove closed or liquidated with active commitments | Alert (`trove-inactive`) |
 | Recovery Mode | A call reverts `RecoveryModeNeedsReserve(btc)` | Alert with the BTC needed, retry next tick |

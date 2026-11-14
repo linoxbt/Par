@@ -7,6 +7,7 @@ Every number Par depends on, where it is set, and where to read it onchain.
 | Stress drop | 40% | ParFactory constructor (`STRESS_BPS = 4000`) | `stressBps()` |
 | Target ratio under stress | 160% | ParFactory constructor (`TARGET_ICR = 1.6e18`) | `targetIcr()` |
 | Minimum challenge window | 60 s | ParVault constant | `MIN_CHALLENGE_WINDOW()` |
+| Minimum trigger window | 300 s | ParVault constant: a scheduled guarantee's expiry must be ≥ last due + grace + 300 s | `MIN_TRIGGER_WINDOW()` |
 | Arbiter resolve window | 7 days | ParVault constant | `RESOLVE_WINDOW()` |
 | Recovery top-up margin | +0.1% over the target ratio | ParVault constant (`RM_EPSILON`, private) | — |
 
@@ -30,7 +31,8 @@ A vault refuses to initialise with `stressBps ≥ 10000` or `targetIcr` below 15
 | --- | --- |
 | Monthly schedule | 30-day period, 3-day grace |
 | Weekly schedule | 7-day period, 1-day grace |
-| Demo schedule | 120 s period, 10 s grace, first due in 30 s |
+| Demo schedule | 120 s period, 10 s grace, first due in 60 s |
+| First due (any schedule) | At least 30 s from signing, so the start is still in the future when mined |
 | Expiry margin | 7 days after the last due time plus grace (600 s for the demo schedule) |
 | Bond inputs | Validity in days, challenge window in hours |
 

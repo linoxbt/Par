@@ -31,7 +31,7 @@ In Recovery Mode, MUSD only allows new debt together with a collateral top-up. T
 :::
 
 :::details Who decides disputed claims?
-For installments, nobody: the contract can see whether the payment arrived. For bonds there is a challenge window, and only disputed claims go to an arbiter that both sides agreed on when the bond was created. The arbiter cannot be the owner or the beneficiary, and has 7 days to decide; after that the claim pays by default.
+For installments, nobody: the contract can see whether the payment arrived. For bonds there is a challenge window, and only disputed claims go to an arbiter that both sides agreed on when the bond was created. The arbiter cannot be the owner, the beneficiary or the principal, and has 7 days to decide; after that the claim pays by default.
 :::
 
 :::details What if the keeper is down?

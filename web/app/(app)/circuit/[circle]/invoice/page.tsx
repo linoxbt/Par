@@ -28,7 +28,7 @@ export default function InvoicesPage({ params }: { params: { circle: string } })
 function Invoices({ circleId }: { circleId: bigint }) {
   const { me, isConnected } = useMe()
   const s = useCircle(circleId, undefined, me)
-  const { invoices, refetch } = useInvoices(circleId)
+  const { invoices, error: invError, refetch } = useInvoices(circleId)
   const [debtor, setDebtor] = useState("")
   const [amount, setAmount] = useState("")
   const [ref, setRef] = useState("")
@@ -121,6 +121,7 @@ function Invoices({ circleId }: { circleId: bigint }) {
         </Card>
       )}
 
+      {invError && <p className="rounded-lg bg-warn-wash px-3 py-2 text-sm text-warn">Invoices may be out of date: {invError}. Retrying…</p>}
       <div className="grid gap-4 lg:grid-cols-2">
         <InvoiceList title="Billed to you" list={toMe} me={me} current={s.current} onDone={refetch} />
         <InvoiceList title="You billed" list={fromMe} me={me} current={s.current} onDone={refetch} />

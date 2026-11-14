@@ -45,8 +45,8 @@ All three run the stress test with the new cap (`health(cap)`) and revert `Unhea
 
 | Function | Rules (else `BadParams`) |
 | --- | --- |
-| `createScheduled(beneficiary, principal, uint128 installment, uint64 start, uint32 period, uint32 grace, uint16 count, uint128 coverCap, uint64 expiry) → id` | Non-zero beneficiary, installment, count, period and cover; `coverCap ≤ installment × count`; `start ≥ now`; `expiry > start + (count − 1) × period + grace`. |
-| `createClaim(beneficiary, principal, arbiter, uint128 cap, uint64 expiry, uint32 challengeWindow) → id` | Non-zero beneficiary and arbiter; arbiter ≠ owner and ≠ beneficiary; non-zero cap; expiry in the future; `challengeWindow ≥ 60`. |
+| `createScheduled(beneficiary, principal, uint128 installment, uint64 start, uint32 period, uint32 grace, uint16 count, uint128 coverCap, uint64 expiry) → id` | Non-zero beneficiary, installment, count, period and cover; `coverCap ≤ installment × count`; `start ≥ now`; `expiry ≥ start + (count − 1) × period + grace + MIN_TRIGGER_WINDOW` (300 s), so the last installment stays triggerable for at least five minutes. |
+| `createClaim(beneficiary, principal, arbiter, uint128 cap, uint64 expiry, uint32 challengeWindow) → id` | Non-zero beneficiary and arbiter; the arbiter must differ from the owner, the beneficiary and the principal; non-zero cap; expiry in the future; `challengeWindow ≥ 60`. |
 | `createClearingLine(address circuit, uint128 cap, uint64 expiry) → id` | `circuit` must be a contract; non-zero cap; expiry in the future. The principal is the owner. |
 
 ## Installments
@@ -72,8 +72,8 @@ All three run the stress test with the new cap (`health(cap)`) and revert `Unhea
 
 | Function | Access | Description |
 | --- | --- | --- |
-| `drawLine(uint256 id, uint256 amount, address up, address lo)` | The line's circuit | Pays `amount` to the circuit through the waterfall, before expiry. |
-| `closeCommitment(uint256 id)` | Beneficiary any time; anyone after expiry | Releases `cap − paidOut` from `reserved`. Never while a claim is open (`ClaimOpen`). Emits `CommitmentClosed`. |
+| `drawLine(uint256 id, uint256 amount, address up, address lo)` | The line's circuit | Pays `amount` to the circuit through the waterfall. No expiry check: the circuit only books new debt on a line while it is live, and debt booked before expiry stays collectable after it, however late the force-settle runs. |
+| `closeCommitment(uint256 id)` | Beneficiary any time; anyone after expiry | Releases `cap − paidOut` from `reserved`. Never while a claim is open (`ClaimOpen`). An expired clearing line can't be closed by anyone but its circuit while the circuit still has debt booked on it (`outstanding > 0`, `LineOwed`). Emits `CommitmentClosed`. |
 
 ## Views
 
@@ -88,7 +88,7 @@ All three run the stress test with the new cap (`health(cap)`) and revert `Unhea
 | `reserved() → uint256` | Sum of `cap − paidOut` over active commitments. |
 | `nextId() → uint256` | The id the next commitment will get. |
 | `owner()`, `pendingOwner()`, `factory()` | Addresses. |
-| `stressBps()`, `targetIcr()`, `CCR()`, `MCR()`, `MIN_CHALLENGE_WINDOW()`, `RESOLVE_WINDOW()` | Parameters. |
+| `stressBps()`, `targetIcr()`, `CCR()`, `MCR()`, `MIN_CHALLENGE_WINDOW()` (60 s), `MIN_TRIGGER_WINDOW()` (300 s), `RESOLVE_WINDOW()` (7 days) | Parameters. |
 
 ## Events
 
@@ -111,4 +111,4 @@ All three run the stress test with the new cap (`health(cap)`) and revert `Unhea
 
 See [Errors](/docs/reference/errors) for what each error means and what to do.
 
-`NotOwner`, `NotAuthorized`, `AlreadyInitialized`, `BadParams`, `NotActive`, `Unhealthy`, `TooEarly`, `TooLate`, `AlreadySettled`, `ExceedsCap`, `RecoveryModeNeedsReserve(uint256 btcNeeded)`, `ReservedCommitments`, `ClaimOpen`, `ReserveLocked`.
+`NotOwner`, `NotAuthorized`, `AlreadyInitialized`, `BadParams`, `NotActive`, `Unhealthy`, `TooEarly`, `TooLate`, `AlreadySettled`, `ExceedsCap`, `RecoveryModeNeedsReserve(uint256 btcNeeded)`, `ReservedCommitments`, `ClaimOpen`, `ReserveLocked`, `LineOwed`.
