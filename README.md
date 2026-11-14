@@ -212,7 +212,12 @@ Indexing: no hosted indexer. Vaults come from `ParFactory.vaultsOf/allVaults`, c
 | Recovery Mode | revert `RecoveryModeNeedsReserve(b)` | Alert with `b`, retry next tick |
 
 Every call is simulated first; hints come from HintHelpers/SortedTroves (zero hints as a fallback). Uses chain
-time. Deploy on Railway as a worker (`keeper/Dockerfile`, `keeper/railway.json`).
+time.
+
+**Running on Railway** (project `par-keeper`, service `keeper`): built from `keeper/Dockerfile` on this repo's
+branch, restart policy ALWAYS, scanning every 15 s as `0x7134feafbe2f37927114C26520c32F7fCD379c04`. Variables:
+`CHAIN=testnet`, `RPC_URL`, `FACTORY`, `CIRCUIT`, `INTERVAL_MS`, and `KEEPER_KEY` (secret, set in Railway only).
+Keep that address topped up with testnet BTC for gas.
 
 ## Security notes and known limits
 
