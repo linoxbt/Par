@@ -1,37 +1,68 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { parseEther, keccak256, toHex, type Address } from "viem"
+import { isAddress, keccak256, toHex, type Address } from "viem"
 import { useReadContract, useReadContracts } from "wagmi"
 import { parVaultAbi } from "@/lib/abi"
 import { CIRCUIT, addrUrl } from "@/lib/config"
-import { fmtBtc, fmtDate, fmtDuration, fmtMusd, fmtPct, fmtUsd, short, toNum } from "@/lib/format"
+import { fmtBtc, fmtDate, fmtDuration, fmtMusd, fmtPct, fmtUsd, parseAmount, parseId, short, toNum } from "@/lib/format"
 import { KIND_LABEL, useChainNow, useCommitment, useLogs, useMarket, useMe, useTx, useVault } from "@/lib/hooks"
 import { maxDrop } from "@/lib/risk"
 import { Mark } from "@/components/Header"
-import { Addr, Badge, Button, Card, CardTitle, Field, Meter, TxLink, TxStatus, inputCls } from "@/components/ui"
+import { Addr, Badge, Button, Card, CardTitle, Field, Meter, Problem, TxLink, TxStatus, inputCls } from "@/components/ui"
 
 const Z = "0x0000000000000000000000000000000000000000" as Address
 
-export default function Certificate({ params }: { params: { vault: string; id: string } }) {
-  const vault = params.vault as Address
-  const id = BigInt(params.id)
-  const { c, refetch } = useCommitment(vault, id)
+export default function CertificatePage({ params }: { params: { vault: string; id: string } }) {
+  const id = parseId(params.id)
+  if (!isAddress(params.vault) || id === undefined)
+    return (
+      <Problem title="This isn't a valid certificate link" action={{ href: "/vault", label: "Open the app" }}>
+        Certificate links look like /c/&lt;vault address&gt;/&lt;number&gt;. Check the link you were sent.
+      </Problem>
+    )
+  return <Certificate vault={params.vault as Address} id={id} />
+}
+
+function Certificate({ vault, id }: { vault: Address; id: bigint }) {
+  const { c, refetch, error } = useCommitment(vault, id)
   const { data: v } = useVault(vault)
   const m = useMarket()
   const now = useChainNow()
-  const allLogs = useLogs(vault, parVaultAbi as any)
+  const { logs: allLogs, error: logError } = useLogs(vault, parVaultAbi as any)
   const logs = useMemo(() => (allLogs ?? []).filter((l) => l.args?.id === id), [allLogs, id])
+  const { data: settled, refetch: refetchSettled } = useReadContracts({
+    contracts: Array.from({ length: c?.kind === 0 ? c.count : 0 }, (_, i) => ({
+      address: vault,
+      abi: parVaultAbi,
+      functionName: "installmentSettled" as const,
+      args: [id, BigInt(i)] as const,
+    })),
+    allowFailure: false,
+    query: { enabled: c?.kind === 0, refetchInterval: 6_000 },
+  })
 
+  if (error && !c)
+    return (
+      <Problem title="No guarantee found" action={{ href: "/vault", label: "Open the app" }}>
+        There is no Par vault with commitment #{String(id)} at {short(vault)} on this network.
+      </Problem>
+    )
   if (!c || !v) return <div className="mx-auto h-96 max-w-lg animate-pulse rounded-2xl border border-line bg-white" />
-  if (c.status === 0) return <div className="mx-auto max-w-lg py-20 text-center text-muted">No such guarantee.</div>
+  if (c.status === 0)
+    return (
+      <Problem title="No such guarantee" action={{ href: "/vault", label: "Open the app" }}>
+        Vault {short(vault)} has no commitment #{String(id)}.
+      </Problem>
+    )
 
   const expired = now > Number(c.expiry)
   const remaining = c.cap - c.paidOut
   const drop = m.price ? maxDrop(v.coll, v.debt, v.reserved, m.price) : 0
   const payouts = logs.filter((l) => l.eventName === "Payout")
   const payments = logs.filter((l) => l.eventName === "InstallmentPaid")
-  const moved = payouts.length > 0 || payments.length > 0
+  // Ground truth comes from contract state, not logs: paidOut, and installments marked settled.
+  const moved = c.paidOut > 0n || (settled ?? []).some(Boolean) || payments.length > 0
 
   let status: { label: string; tone: "ok" | "warn" | "bad" | "muted"; big: string }
   if (c.status === 1 && !expired) status = { label: "Active", tone: v.healthOk ? "ok" : "warn", big: "Guaranteed" }
@@ -110,7 +141,7 @@ export default function Certificate({ params }: { params: { vault: string; id: s
 
           {!moved && c.status === 1 && (
             <p className="mt-5 flex items-center gap-2 text-sm text-muted">
-              <span className="h-1.5 w-1.5 rounded-full bg-btc" /> No money has moved. Nothing is borrowed until a payment is missed.
+              <span className="h-1.5 w-1.5 rounded-full bg-btc" /> No money has moved under this guarantee yet.
             </p>
           )}
           {!v.healthOk && c.status === 1 && (
@@ -148,12 +179,28 @@ export default function Certificate({ params }: { params: { vault: string; id: s
         </div>
       </article>
 
-      {c.kind === 0 && <Timeline vault={vault} c={c} now={now} logs={logs} />}
+      {c.kind === 0 && (
+        <Timeline
+          vault={vault}
+          c={c}
+          now={now}
+          logs={logs}
+          settled={settled as boolean[] | undefined}
+          onDone={() => {
+            refetch()
+            refetchSettled()
+          }}
+        />
+      )}
       {c.kind === 1 && <ClaimPanel vault={vault} c={c} now={now} onDone={refetch} />}
+      <ManagePanel vault={vault} c={c} now={now} onDone={refetch} />
 
       <Card>
         <CardTitle>Payout history</CardTitle>
-        {payouts.length === 0 ? (
+        {logError && <p className="mb-2 rounded-lg bg-warn-wash px-3 py-2 text-xs text-warn">History is incomplete: {logError}. Contract state above is current.</p>}
+        {allLogs === undefined && !logError ? (
+          <p className="text-sm text-muted">Loading history…</p>
+        ) : payouts.length === 0 ? (
           <p className="text-sm text-muted">No payouts yet.</p>
         ) : (
           <div className="divide-y divide-line">
@@ -194,17 +241,22 @@ export default function Certificate({ params }: { params: { vault: string; id: s
   )
 }
 
-function Timeline({ vault, c, now, logs }: { vault: Address; c: any; now: number; logs: any[] }) {
-  const { data: settled } = useReadContracts({
-    contracts: Array.from({ length: c.count }, (_, i) => ({
-      address: vault,
-      abi: parVaultAbi,
-      functionName: "installmentSettled" as const,
-      args: [c.id, BigInt(i)] as const,
-    })),
-    allowFailure: false,
-    query: { refetchInterval: 6_000 },
-  })
+function Timeline({
+  vault,
+  c,
+  now,
+  logs,
+  settled,
+  onDone,
+}: {
+  vault: Address
+  c: any
+  now: number
+  logs: any[]
+  settled?: boolean[]
+  onDone: () => void
+}) {
+  const t = useTx(onDone)
   const paidBy = new Map<number, any>()
   const coveredBy = new Map<number, any>()
   for (const l of logs) {
@@ -220,17 +272,27 @@ function Timeline({ vault, c, now, logs }: { vault: Address; c: any; now: number
         const s = settled?.[i]
         const paid = paidBy.get(i)
         const cov = coveredBy.get(i)
+        const pastExpiry = trigger >= Number(c.expiry)
         let label: React.ReactNode
+        let action: React.ReactNode = null
         if (paid) label = <Badge tone="ok">Paid by tenant</Badge>
         else if (cov) label = <Badge tone="btc">Covered by vault</Badge>
         else if (s) label = <Badge tone="ok">Settled</Badge>
         else if (c.status !== 1) label = <Badge tone="muted">–</Badge>
-        else if (now > trigger) label = <Badge tone="bad">Missed · paying</Badge>
-        else if (now > due) label = <Badge tone="warn">Late · vault pays in {fmtDuration(trigger - now)}</Badge>
+        else if (now > trigger && (pastExpiry || now > Number(c.expiry))) label = <Badge tone="muted">Not covered (after expiry)</Badge>
+        else if (now > trigger) {
+          label = <Badge tone="bad">Missed · payout due</Badge>
+          // Permissionless: anyone can trigger the payout if the keeper hasn't yet.
+          action = (
+            <Button size="sm" busy={t.busy} onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "triggerMissed", args: [c.id, BigInt(i), Z, Z] })}>
+              Trigger payout
+            </Button>
+          )
+        } else if (now > due) label = <Badge tone="warn">Late · vault pays in {fmtDuration(trigger - now)}</Badge>
         else label = <span className="num text-xs text-subtle">due in {fmtDuration(due - now)}</span>
         const tx = paid ?? cov
         return (
-          <div key={i} className="flex items-center justify-between border-t border-line py-2.5 text-sm first:border-t-0">
+          <div key={i} className="flex flex-wrap items-center justify-between gap-2 border-t border-line py-2.5 text-sm first:border-t-0">
             <div className="flex items-center gap-3">
               <span className={`flex h-6 w-6 items-center justify-center rounded-full font-mono text-[10px] ${paid || cov || s ? "bg-fg text-white" : "bg-soft text-subtle"}`}>{i + 1}</span>
               <span className="num">{fmtMusd(c.installment, 0)}</span>
@@ -238,11 +300,41 @@ function Timeline({ vault, c, now, logs }: { vault: Address; c: any; now: number
             </div>
             <div className="flex items-center gap-2">
               {label}
+              {action}
               {tx && <TxLink hash={tx.transactionHash} label="tx" />}
             </div>
           </div>
         )
       })}
+      <TxStatus tx={t} />
+    </Card>
+  )
+}
+
+/** Release (beneficiary, any time without an open claim) or close (anyone, after expiry). Frees reserved capacity. */
+function ManagePanel({ vault, c, now, onDone }: { vault: Address; c: any; now: number; onDone: () => void }) {
+  const { me } = useMe()
+  const t = useTx(onDone)
+  const { data: pending } = useReadContract({ address: vault, abi: parVaultAbi, functionName: "pendingClaims", args: [c.id], query: { refetchInterval: 8_000 } })
+  if (c.status !== 1) return null
+  const claimOpen = Boolean((pending as any)?.[3] ?? (pending as any)?.open)
+  const isBen = me?.toLowerCase() === c.beneficiary.toLowerCase()
+  const expired = now > Number(c.expiry)
+  if (claimOpen || (!isBen && !expired)) return null
+  return (
+    <Card className="flex flex-col gap-2 text-sm">
+      <CardTitle>{expired ? "Close this commitment" : "Release this guarantee"}</CardTitle>
+      <p className="text-muted">
+        {expired
+          ? "It has expired. Closing it frees the vault's reserved capacity. Anyone can do this."
+          : "As the beneficiary you can release the vault from this promise early. This can't be undone."}
+      </p>
+      <div>
+        <Button variant={expired ? "primary" : "danger"} busy={t.busy} onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "closeCommitment", args: [c.id] })}>
+          {expired ? "Close commitment" : "Release guarantee"}
+        </Button>
+      </div>
+      <TxStatus tx={t} />
     </Card>
   )
 }
@@ -252,6 +344,7 @@ function ClaimPanel({ vault, c, now, onDone }: { vault: Address; c: any; now: nu
   const { data: pc, refetch } = useReadContract({ address: vault, abi: parVaultAbi, functionName: "pendingClaims", args: [c.id], query: { refetchInterval: 6_000 } })
   const { data: owner } = useReadContract({ address: vault, abi: parVaultAbi, functionName: "owner" })
   const [amount, setAmount] = useState("")
+  const amountWei = parseAmount(amount)
   const [evidence, setEvidence] = useState("")
   const done = () => {
     refetch()
@@ -306,16 +399,17 @@ function ClaimPanel({ vault, c, now, onDone }: { vault: Address; c: any; now: nu
       ) : isBen && c.status === 1 ? (
         <div className="flex flex-col gap-3">
           <Field label="Amount (MUSD)">
-            <input className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <input className={inputCls} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
           </Field>
           <Field label="Evidence" hint="A link or IPFS/Walrus CID; its hash is stored onchain.">
             <input className={inputCls} value={evidence} onChange={(e) => setEvidence(e.target.value)} />
           </Field>
           <Button
             busy={t.busy}
-            disabled={!amount}
+            disabled={amountWei === undefined || amountWei === 0n || amountWei > c.cap - c.paidOut}
             onClick={() =>
-              t.send({ address: vault, abi: parVaultAbi, functionName: "fileClaim", args: [c.id, parseEther(amount), keccak256(toHex(evidence || "none"))] })
+              amountWei !== undefined &&
+              t.send({ address: vault, abi: parVaultAbi, functionName: "fileClaim", args: [c.id, amountWei, keccak256(toHex(evidence || "none"))] })
             }
           >
             File claim

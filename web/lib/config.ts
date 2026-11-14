@@ -12,7 +12,8 @@ export const CIRCUIT = addr(process.env.NEXT_PUBLIC_CIRCUIT)
 export const FACTORY_BLOCK = BigInt(process.env.NEXT_PUBLIC_FACTORY_BLOCK || "0")
 /** Reown (WalletConnect) Cloud project ID: https://cloud.reown.com. Public, not a secret. */
 export const REOWN_PROJECT_ID = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID || process.env.NEXT_PUBLIC_WC_PROJECT_ID || ""
-export const WC_PROJECT_ID = REOWN_PROJECT_ID || "par-dev"
+/** RainbowKit/Passport fallback needs a WalletConnect ID too; without one, WalletConnect QR is unavailable but injected wallets work. */
+export const WC_PROJECT_ID = REOWN_PROJECT_ID || "00000000000000000000000000000000"
 export const CONFIGURED = FACTORY !== ZERO
 
 export const mezoMainnet = defineChain({
@@ -34,7 +35,6 @@ export const localChain = defineChain({
 export const chain: Chain = NETWORK === "mainnet" ? mezoMainnet : NETWORK === "local" ? localChain : mezoTestnet
 export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || chain.rpcUrls.default.http[0]
 export const EXPLORER = chain.blockExplorers?.default.url ?? ""
-export const HAS_MULTICALL = Boolean(chain.contracts?.multicall3)
 
 const IRM: Record<Network, Address | undefined> = {
   testnet: "0xD4D6c36A592A2c5e86035A6bca1d57747a567f37",

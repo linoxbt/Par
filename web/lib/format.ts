@@ -30,3 +30,31 @@ export function fmtDuration(sec: number) {
 
 export const fmtDate = (ts: number | bigint) =>
   new Date(Number(ts) * 1000).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })
+
+/**
+ * Safe input parsing. Never throws: returns undefined for anything that isn't a clean number, so
+ * typing "1,500", "1e3" or "0.1." can't crash a page during render.
+ */
+const DEC = /^\d+(\.\d+)?$/
+export function parseAmount(input: string | undefined, decimals = 18): bigint | undefined {
+  const s = (input ?? "").trim().replace(/_/g, "")
+  if (!DEC.test(s)) return undefined
+  const [w, f = ""] = s.split(".")
+  if (f.length > decimals) return undefined
+  try {
+    return BigInt(w) * 10n ** BigInt(decimals) + BigInt((f + "0".repeat(decimals)).slice(0, decimals) || "0")
+  } catch {
+    return undefined
+  }
+}
+/** Positive integer (or zero when allowZero) from a string; undefined otherwise. */
+export function parseIntSafe(input: string | number | undefined, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}): number | undefined {
+  const s = String(input ?? "").trim()
+  if (!/^\d+$/.test(s)) return undefined
+  const n = Number(s)
+  return n >= min && n <= max ? n : undefined
+}
+/** Unsigned integer route param as bigint; undefined if malformed. */
+export function parseId(input: string | undefined): bigint | undefined {
+  return input && /^\d{1,30}$/.test(input) ? BigInt(input) : undefined
+}

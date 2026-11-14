@@ -1,24 +1,33 @@
 "use client"
 
 import Link from "next/link"
-import { type Address } from "viem"
+import { isAddress, type Address } from "viem"
 import { useReadContract, useReadContracts } from "wagmi"
 import { WalletButton } from "@/components/Wallet"
 import { parVaultAbi } from "@/lib/abi"
 import { erc20Abi } from "@/lib/mezoAbi"
-import { fmtDate, fmtDuration, fmtMusd } from "@/lib/format"
+import { fmtDate, fmtDuration, fmtMusd, parseId } from "@/lib/format"
 import { useChainNow, useCommitment, useMe, useProtocol, useTx } from "@/lib/hooks"
-import { Addr, Button, Card, Empty, PageHead, TxStatus } from "@/components/ui"
+import { Addr, Button, Card, Empty, PageHead, Problem, TxStatus } from "@/components/ui"
 
 const Z = "0x0000000000000000000000000000000000000000" as Address
 
 export default function PayPage({ params }: { params: { vault: string; id: string } }) {
-  const vault = params.vault as Address
-  const id = BigInt(params.id)
+  const id = parseId(params.id)
+  if (!isAddress(params.vault) || id === undefined)
+    return (
+      <Problem title="This isn't a valid payment link" action={{ href: "/vault", label: "Open the app" }}>
+        Payment links look like /pay/&lt;vault address&gt;/&lt;number&gt;.
+      </Problem>
+    )
+  return <Pay vault={params.vault as Address} id={id} />
+}
+
+function Pay({ vault, id }: { vault: Address; id: bigint }) {
   const { me, isConnected } = useMe()
   const p = useProtocol()
   const now = useChainNow()
-  const { c } = useCommitment(vault, id)
+  const { c, error: cErr } = useCommitment(vault, id)
   const { data: settled, refetch: refetchSettled } = useReadContracts({
     contracts: Array.from({ length: c?.count ?? 0 }, (_, i) => ({
       address: vault,
@@ -59,8 +68,14 @@ export default function PayPage({ params }: { params: { vault: string; id: strin
         </div>
       </Empty>
     )
+  if (cErr && !c)
+    return (
+      <Problem title="No guarantee found" action={{ href: "/vault", label: "Open the app" }}>
+        There is no Par commitment #{String(id)} at this vault on this network.
+      </Problem>
+    )
   if (!c || !p) return <Card>Loading…</Card>
-  if (c.kind !== 0) return <Empty>This commitment has no installments.</Empty>
+  if (c.status === 0 || c.kind !== 0) return <Problem title="Nothing to pay here">This commitment isn&apos;t an installment guarantee.</Problem>
 
   const next = settled ? settled.findIndex((s) => !s) : -1
   const due = next >= 0 ? Number(c.start) + next * c.period : 0

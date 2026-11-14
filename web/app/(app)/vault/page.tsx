@@ -3,12 +3,12 @@
 import Link from "next/link"
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { formatEther, parseEther, type Address } from "viem"
+import { formatEther, type Address } from "viem"
 import { useBalance, useReadContract, useSendTransaction, useWaitForTransactionReceipt } from "wagmi"
 import { WalletButton } from "@/components/Wallet"
 import { parFactoryAbi, parVaultAbi } from "@/lib/abi"
-import { CIRCUIT, CONFIGURED, FACTORY, addrUrl } from "@/lib/config"
-import { fmtBps, fmtBtc, fmtDate, fmtMusd, fmtPct, fmtRatio, fmtUsd, short, toNum } from "@/lib/format"
+import { CIRCUIT, CONFIGURED, FACTORY, addrUrl, chain } from "@/lib/config"
+import { fmtBps, fmtBtc, fmtDate, fmtMusd, fmtPct, fmtRatio, fmtUsd, parseAmount, parseIntSafe, short, toNum } from "@/lib/format"
 import { KIND_LABEL, errorText, useChainNow, useCommitments, useMarket, useMe, useProtocol, useTx, useVault, useVaultsOf, type Commitment } from "@/lib/hooks"
 import { liquidationPrice, maxDrop, openPreview } from "@/lib/risk"
 import { Badge, Button, Card, CardTitle, Empty, Field, HealthGauge, LinkButton, Meter, NotDeployed, PageHead, Segmented, Stat, TxLink, TxStatus, inputCls } from "@/components/ui"
@@ -128,8 +128,12 @@ function CreateVault({ onDone, secondary }: { onDone: () => void; secondary?: bo
     return (
       <div className="text-right text-xs text-subtle">
         One vault holds one trove ·{" "}
-        <button className="font-medium text-fg hover:text-btc-ink" onClick={() => tx.send({ address: FACTORY, abi: parFactoryAbi, functionName: "createVault" })}>
-          Create another vault
+        <button
+          className="font-medium text-fg hover:text-btc-ink disabled:opacity-40"
+          disabled={tx.busy}
+          onClick={() => tx.send({ address: FACTORY, abi: parFactoryAbi, functionName: "createVault" })}
+        >
+          {tx.busy ? "Creating…" : "Create another vault"}
         </button>
         <TxStatus tx={tx} />
       </div>
@@ -152,11 +156,29 @@ function OpenTrove({ vault, onDone }: { vault: Address; onDone: () => void }) {
   const { data: bal } = useBalance({ address: me })
   const [btc, setBtc] = useState("0.25")
   const [seed, setSeed] = useState("")
-  const seedWei = seed ? parseEther(seed) : m.minNetDebt
-  const collWei = btc && Number(btc) > 0 ? parseEther(btc) : 0n
+  const { data: vs } = useVault(vault)
+  const seedWei = seed.trim() ? parseAmount(seed) : m.minNetDebt
+  const collWei = parseAmount(btc) ?? 0n
+  const pv = p && m.price && seedWei !== undefined ? openPreview(collWei, m.price, seedWei, p.stressBps, p.targetIcr) : undefined
+  const notOwner = !!vs?.owner && !!me && vs.owner.toLowerCase() !== me.toLowerCase()
+  const problem =
+    parseAmount(btc) === undefined
+      ? "Enter the BTC amount as a plain number, e.g. 0.25."
+      : collWei === 0n
+        ? "Enter how much BTC to lock."
+        : bal && collWei > bal.value
+          ? "That's more BTC than your wallet holds."
+          : seedWei === undefined
+            ? "Enter the buffer as a plain number, e.g. 1800."
+            : seedWei < m.minNetDebt
+              ? `MUSD's minimum loan is ${fmtMusd(m.minNetDebt, 0)} MUSD.`
+              : notOwner
+                ? "Only the vault owner can open its trove."
+                : pv && pv.icr < 1_100_000_000_000_000_000n
+                  ? "Not enough BTC for this loan: the collateral ratio would be under 110%."
+                  : undefined
   const walletBtc = bal ? Number(formatEther(bal.value)) : 0
   const max = bal ? Math.max(0.001, walletBtc * 0.98) : 1
-  const pv = p && m.price ? openPreview(collWei, m.price, seedWei, p.stressBps, p.targetIcr) : undefined
   const tx = useTx(() => onDone())
   const total = pv ? toNum(pv.capacity) : 0
   const pct = (x?: bigint) => (total > 0 && x !== undefined ? (toNum(x) / total) * 100 : 0)
@@ -179,7 +201,7 @@ function OpenTrove({ vault, onDone }: { vault: Address; onDone: () => void }) {
             />
             <span className="text-sm text-muted">BTC</span>
           </div>
-          <input type="range" min={0.001} max={max} step={0.001} value={btc || 0} onChange={(e) => setBtc(e.target.value)} className="mt-3 w-full accent-[#0A0A0B]" />
+          <input type="range" aria-label="Collateral in BTC" min={0.001} max={max} step={0.001} value={Number(btc) || 0} onChange={(e) => setBtc(e.target.value)} className="mt-3 w-full accent-[#0A0A0B]" />
           <div className="mt-2 flex gap-2">
             {["0.1", "0.25", "0.5"].map((v) => (
               <button key={v} onClick={() => setBtc(v)} className="rounded-full border border-line bg-white px-3 py-1 font-mono text-xs hover:border-fg">
@@ -195,18 +217,19 @@ function OpenTrove({ vault, onDone }: { vault: Address; onDone: () => void }) {
         </div>
         <div className="mt-4">
           <Field label="Buffer draw (MUSD)" hint={`MUSD's minimum loan is ${fmtMusd(m.minNetDebt, 0)}. It stays in the vault and pays the first claims without new debt.`}>
-            <input className={inputCls} placeholder={formatEther(m.minNetDebt)} value={seed} onChange={(e) => setSeed(e.target.value)} />
+            <input className={inputCls} inputMode="decimal" placeholder={formatEther(m.minNetDebt)} value={seed} onChange={(e) => setSeed(e.target.value)} />
           </Field>
         </div>
         <div className="mt-6 flex flex-wrap items-center gap-4">
           <Button
             busy={tx.busy}
-            disabled={!collWei || (pv && pv.icr < 1_100_000_000_000_000_000n)}
+            disabled={!!problem}
             onClick={() => tx.send({ address: vault, abi: parVaultAbi, functionName: "openTrove", args: [seedWei, Z, Z], value: collWei })}
           >
-            Open trove with {btc || 0} BTC
+            Open trove with {fmtBtc(collWei)} BTC
           </Button>
           <TxStatus tx={tx} />
+          {problem && <p className="w-full text-sm text-warn">{problem}</p>}
         </div>
       </Card>
 
@@ -457,7 +480,7 @@ function TopUp({ vault, onDone }: { vault: Address; onDone: () => void }) {
         value={v}
         onChange={setV}
         action={
-          <Button busy={t.busy} disabled={!v} onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "topUp", args: [Z, Z], value: parseEther(v) })}>
+          <Button busy={t.busy} disabled={!parseAmount(v)} onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "topUp", args: [Z, Z], value: parseAmount(v)! })}>
             Top up
           </Button>
         }
@@ -488,7 +511,7 @@ function Reserve({ vault, idle, onDone }: { vault: Address; idle: bigint; onDone
         value={v}
         onChange={setV}
         action={
-          <Button busy={send.isPending || rc.isLoading} disabled={!v} onClick={() => send.sendTransaction({ to: vault, value: parseEther(v) })}>
+          <Button busy={send.isPending || rc.isLoading} disabled={!parseAmount(v)} onClick={() => send.sendTransaction({ to: vault, value: parseAmount(v)!, chainId: chain.id })}>
             Fund
           </Button>
         }
@@ -524,7 +547,11 @@ function BufferOut({ vault, buffer, onDone }: { vault: Address; buffer: bigint; 
         value={v}
         onChange={setV}
         action={
-          <Button busy={t.busy} disabled={!v} onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "withdrawMUSDBuffer", args: [parseEther(v), me!] })}>
+          <Button
+            busy={t.busy}
+            disabled={!parseAmount(v) || parseAmount(v)! > buffer || !me}
+            onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "withdrawMUSDBuffer", args: [parseAmount(v)!, me!] })}
+          >
             Withdraw
           </Button>
         }
@@ -546,7 +573,7 @@ function Repay({ vault, onDone }: { vault: Address; onDone: () => void }) {
         value={v}
         onChange={setV}
         action={
-          <Button busy={t.busy} disabled={!v} onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "repay", args: [parseEther(v), Z, Z] })}>
+          <Button busy={t.busy} disabled={!parseAmount(v)} onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "repay", args: [parseAmount(v)!, Z, Z] })}>
             Repay
           </Button>
         }
@@ -558,16 +585,17 @@ function Repay({ vault, onDone }: { vault: Address; onDone: () => void }) {
 
 function ClearingLine({ vault, headroom, onDone }: { vault: Address; headroom: bigint; onDone: () => void }) {
   const [cap, setCap] = useState("1500")
-  const [days, setDays] = useState("30")
+  const [days, setDays] = useState("60")
+  const capWei = parseAmount(cap)
+  const dayN = parseIntSafe(days, { min: 1, max: 3650 })
   const { data: fits } = useReadContract({
     address: vault,
     abi: parVaultAbi,
     functionName: "health",
-    args: [cap ? parseEther(cap) : 0n],
-    query: { enabled: !!cap },
+    args: [capWei ?? 0n],
+    query: { enabled: !!capWei },
   })
   const t = useTx(onDone)
-  const expiry = useMemo(() => BigInt(Math.floor(Date.now() / 1000) + Number(days || 0) * 86400), [days])
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted">
@@ -576,10 +604,10 @@ function ClearingLine({ vault, headroom, onDone }: { vault: Address; headroom: b
       </p>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Line" hint={`Room: ${fmtMusd(headroom, 0)} MUSD`}>
-          <input className={inputCls} value={cap} onChange={(e) => setCap(e.target.value)} />
+          <input className={inputCls} inputMode="decimal" value={cap} onChange={(e) => setCap(e.target.value)} />
         </Field>
-        <Field label="Expires in (days)">
-          <input className={inputCls} value={days} onChange={(e) => setDays(e.target.value)} />
+        <Field label="Expires in (days)" hint="Must outlast every cycle you trade in, plus its settle window.">
+          <input className={inputCls} inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} />
         </Field>
       </div>
       {fits && (
@@ -591,8 +619,16 @@ function ClearingLine({ vault, headroom, onDone }: { vault: Address; headroom: b
       <div>
         <Button
           busy={t.busy}
-          disabled={!fits?.[0] || CIRCUIT === Z}
-          onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "createClearingLine", args: [CIRCUIT, parseEther(cap), expiry] })}
+          disabled={!fits?.[0] || CIRCUIT === Z || !capWei || !dayN}
+          onClick={() =>
+            t.send({
+              address: vault,
+              abi: parVaultAbi,
+              functionName: "createClearingLine",
+              // expiry computed at click time, not when the field was edited
+              args: [CIRCUIT, capWei!, BigInt(Math.floor(Date.now() / 1000) + dayN! * 86400)],
+            })
+          }
         >
           Pledge line
         </Button>

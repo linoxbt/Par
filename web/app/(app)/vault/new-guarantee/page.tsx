@@ -1,16 +1,16 @@
 "use client"
 
 import Link from "next/link"
-import { Suspense, useMemo, useState } from "react"
+import { Suspense, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { decodeEventLog, isAddress, parseEther, type Address } from "viem"
-import { useReadContract } from "wagmi"
+import { decodeEventLog, isAddress, type Address } from "viem"
+import { usePublicClient, useReadContract } from "wagmi"
 import { WalletButton } from "@/components/Wallet"
 import { parVaultAbi } from "@/lib/abi"
-import { fmtDuration, fmtMusd, fmtRatio, short } from "@/lib/format"
+import { fmtDuration, fmtMusd, fmtRatio, parseAmount, parseIntSafe, short } from "@/lib/format"
 import { useMe, useProtocol, useTx, useVault, useVaultsOf } from "@/lib/hooks"
 import { Badge, Button, Card, CardTitle, Field, LinkButton, NotDeployed, PageHead, Segmented, TxStatus, inputCls } from "@/components/ui"
-import { CONFIGURED } from "@/lib/config"
+import { CONFIGURED, chain } from "@/lib/config"
 
 const PERIODS = [
   { label: "Monthly", sec: 30 * 86400, grace: 3 * 86400 },
@@ -30,7 +30,9 @@ function Builder() {
   const { me, isConnected } = useMe()
   const { vaults } = useVaultsOf(me)
   const sp = useSearchParams()
-  const vault = (sp.get("v") as Address | null) ?? vaults[vaults.length - 1]
+  const qv = sp.get("v")
+  const vault = (qv && isAddress(qv) ? (qv as Address) : undefined) ?? vaults[vaults.length - 1]
+  const pc = usePublicClient({ chainId: chain.id })
   const { data: v } = useVault(vault)
   const p = useProtocol()
 
@@ -48,7 +50,12 @@ function Builder() {
   const [windowH, setWindowH] = useState("48")
 
   const period = PERIODS[periodIdx]
-  const capWei = type === "rent" ? (cover ? parseEther(cover) : 0n) : bondCap ? parseEther(bondCap) : 0n
+  const capWei = (type === "rent" ? parseAmount(cover) : parseAmount(bondCap)) ?? 0n
+  const instWei = parseAmount(installment)
+  const countN = parseIntSafe(count, { min: 1, max: 1000 })
+  const startInN = startIn.trim() ? parseIntSafe(startIn, { min: 0, max: 10 * 365 * 86400 }) : undefined
+  const bondDaysN = parseIntSafe(bondDays, { min: 1, max: 3650 })
+  const windowSec = /^\d+(\.\d+)?$/.test(windowH.trim()) ? Math.round(Number(windowH) * 3600) : undefined
   const { data: fit } = useReadContract({
     address: vault,
     abi: parVaultAbi,
@@ -57,13 +64,25 @@ function Builder() {
     query: { enabled: !!vault && capWei > 0n, refetchInterval: 10_000 },
   })
 
-  const plan = useMemo(() => {
-    const now = Math.floor(Date.now() / 1000)
-    const start = now + (startIn ? Number(startIn) : periodIdx === 2 ? 30 : period.sec)
-    const n = Number(count || 0)
+  /**
+   * Schedule times are computed from CHAIN time at the moment of signing, not when the form was
+   * filled: a slow signature can no longer create installment #0 already past due + grace.
+   */
+  const firstDueIn = startInN ?? (periodIdx === 2 ? 60 : period.sec)
+  const planAt = (now: number) => {
+    const start = now + firstDueIn
+    const n = countN ?? 0
     const expiry = start + Math.max(0, n - 1) * period.sec + period.grace + (periodIdx === 2 ? 600 : 7 * 86400)
     return { start, expiry }
-  }, [startIn, count, period, periodIdx])
+  }
+  const chainNow = async () => {
+    try {
+      const b = await pc!.getBlock()
+      return Math.max(Number(b.timestamp), Math.floor(Date.now() / 1000))
+    } catch {
+      return Math.floor(Date.now() / 1000)
+    }
+  }
 
   const [created, setCreated] = useState<bigint>()
   const tx = useTx((rc) => {
@@ -104,45 +123,56 @@ function Builder() {
       </div>
     )
 
+  const lc = (a?: string) => a?.toLowerCase()
   const benOk = isAddress(beneficiary)
-  const prinAddr = (principal && isAddress(principal) ? principal : me) as Address
-  const capTooBig = type === "rent" && capWei > parseEther(installment || "0") * BigInt(count || 0)
-  const valid =
-    benOk &&
-    capWei > 0n &&
-    (type === "rent" ? Number(installment) > 0 && Number(count) > 0 && !capTooBig : isAddress(arbiter))
+  const prinOk = !principal.trim() || isAddress(principal)
+  const prinAddr = (principal.trim() ? principal : me) as Address
+  const isOwner = !v?.owner || lc(v.owner) === lc(me)
+  const capTooBig = type === "rent" && instWei !== undefined && countN !== undefined && capWei > instWei * BigInt(countN)
+  const arbOk = isAddress(arbiter) && lc(arbiter) !== lc(v?.owner ?? me) && lc(arbiter) !== lc(beneficiary)
+  const problem = !isOwner
+    ? "Only the vault owner can make promises from this vault."
+    : beneficiary && !benOk
+      ? "The beneficiary isn't a valid address."
+      : !prinOk
+        ? "The payer/principal isn't a valid address (leave it empty to use yours)."
+        : capWei === 0n
+          ? "Enter the cover as a plain number, e.g. 1500."
+          : type === "rent"
+            ? instWei === undefined || instWei === 0n
+              ? "Enter the installment as a plain number, e.g. 500."
+              : countN === undefined
+                ? "Number of installments must be a whole number from 1 to 1000."
+                : startIn.trim() && startInN === undefined
+                  ? "First due must be a whole number of seconds."
+                  : capTooBig
+                    ? "Cover cap can't exceed installment × count."
+                    : undefined
+            : arbiter && !arbOk
+              ? "The arbiter must be a valid address that isn't you or the beneficiary."
+              : bondDaysN === undefined
+                ? "Validity must be a whole number of days."
+                : windowSec === undefined || windowSec < 60
+                  ? "The challenge window must be at least one minute (e.g. 0.02 h)."
+                  : undefined
+  const valid = !problem && benOk && (type === "rent" || arbOk)
 
-  const submit = () => {
+  const submit = async () => {
+    const now = await chainNow()
     if (type === "rent") {
+      const plan = planAt(now)
       tx.send({
         address: vault,
         abi: parVaultAbi,
         functionName: "createScheduled",
-        args: [
-          beneficiary as Address,
-          prinAddr,
-          parseEther(installment),
-          BigInt(plan.start),
-          period.sec,
-          period.grace,
-          Number(count),
-          capWei,
-          BigInt(plan.expiry),
-        ],
+        args: [beneficiary as Address, prinAddr, instWei!, BigInt(plan.start), period.sec, period.grace, countN!, capWei, BigInt(plan.expiry)],
       })
     } else {
       tx.send({
         address: vault,
         abi: parVaultAbi,
         functionName: "createClaim",
-        args: [
-          beneficiary as Address,
-          prinAddr,
-          arbiter as Address,
-          capWei,
-          BigInt(Math.floor(Date.now() / 1000) + Number(bondDays) * 86400),
-          Math.round(Number(windowH) * 3600),
-        ],
+        args: [beneficiary as Address, prinAddr, arbiter as Address, capWei, BigInt(now + bondDaysN! * 86400), windowSec!],
       })
     }
   }
@@ -152,7 +182,7 @@ function Builder() {
       <Card className="mx-auto flex max-w-lg flex-col items-center gap-4 py-14 text-center">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-ok-wash text-xl text-ok">✓</span>
         <h1 className="h-display text-3xl">Promise made</h1>
-        <p className="text-muted">Nothing has been borrowed. Send the certificate link to the beneficiary.</p>
+        <p className="text-muted">No MUSD was drawn for it. Send the certificate link to the beneficiary.</p>
         <div className="flex gap-3">
           <LinkButton href={`/c/${vault}/${created}`}>Open certificate</LinkButton>
           {type === "rent" && (
@@ -192,10 +222,10 @@ function Builder() {
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Installment (MUSD)">
-                    <input className={inputCls} value={installment} onChange={(e) => setInstallment(e.target.value)} />
+                    <input className={inputCls} inputMode="decimal" value={installment} onChange={(e) => setInstallment(e.target.value)} />
                   </Field>
                   <Field label="Number of installments">
-                    <input className={inputCls} value={count} onChange={(e) => setCount(e.target.value)} />
+                    <input className={inputCls} inputMode="numeric" value={count} onChange={(e) => setCount(e.target.value)} />
                   </Field>
                 </div>
                 <div className="flex flex-col gap-1.5" role="group" aria-label="Schedule">
@@ -215,28 +245,27 @@ function Builder() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Cover cap (MUSD)" hint="The most the vault will ever pay.">
-                    <input className={inputCls} value={cover} onChange={(e) => setCover(e.target.value)} />
+                    <input className={inputCls} inputMode="decimal" value={cover} onChange={(e) => setCover(e.target.value)} />
                   </Field>
                   <Field label="First due in (seconds)" hint={`Grace after each due date: ${fmtDuration(period.grace)}`}>
-                    <input className={inputCls} placeholder={String(periodIdx === 2 ? 30 : period.sec)} value={startIn} onChange={(e) => setStartIn(e.target.value)} />
+                    <input className={inputCls} inputMode="numeric" placeholder={String(periodIdx === 2 ? 60 : period.sec)} value={startIn} onChange={(e) => setStartIn(e.target.value)} />
                   </Field>
                 </div>
-                {capTooBig && <p className="rounded-lg bg-bad-wash px-3 py-2 text-sm text-bad">Cover cap can&apos;t exceed installment × count.</p>}
               </>
             ) : (
               <>
-                <Field label="Arbiter" hint="Decides disputed claims. Both sides should agree on it.">
+                <Field label="Arbiter" hint="Decides disputed claims. Can't be you or the beneficiary. If they don't decide in time, the claim pays.">
                   <input className={inputCls} placeholder="0x…" value={arbiter} onChange={(e) => setArbiter(e.target.value)} />
                 </Field>
                 <div className="grid grid-cols-3 gap-4">
                   <Field label="Cover (MUSD)">
-                    <input className={inputCls} value={bondCap} onChange={(e) => setBondCap(e.target.value)} />
+                    <input className={inputCls} inputMode="decimal" value={bondCap} onChange={(e) => setBondCap(e.target.value)} />
                   </Field>
                   <Field label="Valid (days)">
-                    <input className={inputCls} value={bondDays} onChange={(e) => setBondDays(e.target.value)} />
+                    <input className={inputCls} inputMode="numeric" value={bondDays} onChange={(e) => setBondDays(e.target.value)} />
                   </Field>
                   <Field label="Challenge (h)">
-                    <input className={inputCls} value={windowH} onChange={(e) => setWindowH(e.target.value)} />
+                    <input className={inputCls} inputMode="decimal" value={windowH} onChange={(e) => setWindowH(e.target.value)} />
                   </Field>
                 </div>
               </>
@@ -286,6 +315,7 @@ function Builder() {
           <Button busy={tx.busy} disabled={!valid || !fit?.[0]} onClick={submit} className="w-full py-3">
             Make the promise
           </Button>
+          {problem && <p className="text-sm text-warn">{problem}</p>}
           <TxStatus tx={tx} />
           <Link href="/vault" className="text-center text-xs text-muted hover:text-fg">
             ← Back to vault

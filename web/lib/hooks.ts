@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { type Address, type Abi, BaseError, ContractFunctionRevertedError, decodeEventLog, type Log } from "viem"
 import {
   useAccount,
@@ -9,11 +9,12 @@ import {
   usePublicClient,
   useReadContract,
   useReadContracts,
+  useSwitchChain,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi"
 import { parCircuitAbi, parFactoryAbi, parVaultAbi } from "./abi"
-import { CIRCUIT, FACTORY, FACTORY_BLOCK, INTEREST_RATE_MANAGER, MUSD_DEFAULTS, NETWORK } from "./config"
+import { chain, CIRCUIT, FACTORY, FACTORY_BLOCK, INTEREST_RATE_MANAGER, MUSD_DEFAULTS, NETWORK } from "./config"
 import { borrowerOpsAbi, erc20Abi, interestRateManagerAbi, priceFeedAbi, troveManagerAbi } from "./mezoAbi"
 
 const ZERO = "0x0000000000000000000000000000000000000000" as Address
@@ -31,7 +32,7 @@ export function useNow(intervalMs = 1000) {
 /** Chain time: latest block timestamp, advanced locally between blocks (works with hardhat time travel). */
 export function useChainNow() {
   const now = useNow()
-  const { data: block } = useBlock({ watch: true, query: { refetchInterval: 4000 } })
+  const { data: block } = useBlock({ query: { refetchInterval: 4000 } })
   const [offset, setOffset] = useState(0)
   useEffect(() => {
     if (block) setOffset(Number(block.timestamp) - Math.floor(Date.now() / 1000))
@@ -176,7 +177,6 @@ export type Commitment = {
   challengeWindow: number
 }
 
-export const KIND = ["Scheduled", "Claim", "ClearingLine"] as const
 export const KIND_LABEL = ["Installment guarantee", "Claim bond", "Circuit clearing line"] as const
 
 export function useCommitments(vault?: Address, nextId?: bigint) {
@@ -209,26 +209,48 @@ export function useCommitment(vault?: Address, id?: bigint) {
   return { c: q.data ? ({ ...(q.data as object), id: id! } as Commitment) : undefined, refetch: q.refetch, error: q.error }
 }
 
-/** Event logs for one contract since the factory block (light indexer, spec 6.5). */
+export type DecodedLog = { eventName: string; args: any; transactionHash: string; blockNumber: bigint }
+
+/**
+ * Event logs for one contract since the factory block (light indexer, spec 6.5).
+ * Mezo's RPC rejects getLogs ranges over 10,000 blocks, so this scans in chunks and caches per
+ * address, then only fetches new blocks on each poll. Errors are surfaced, never swallowed into [].
+ */
+const LOG_CHUNK = 9_000n
+const logCache = new Map<string, { to: bigint; logs: DecodedLog[] }>()
+
 export function useLogs(address: Address | undefined, abi: Abi, refreshKey = 0) {
   const pc = usePublicClient()
-  const [logs, setLogs] = useState<{ eventName: string; args: any; transactionHash: string; blockNumber: bigint }[]>()
+  const [state, setState] = useState<{ logs?: DecodedLog[]; error?: string }>(() =>
+    address ? { logs: logCache.get(address.toLowerCase())?.logs } : {},
+  )
   useEffect(() => {
     if (!pc || !address) return
     let dead = false
+    const key = address.toLowerCase()
     const load = async () => {
       try {
-        const raw: Log[] = await pc.getLogs({ address, fromBlock: FACTORY_BLOCK, toBlock: "latest" })
-        const out = []
-        for (const l of raw) {
-          try {
-            const d = decodeEventLog({ abi, data: l.data, topics: l.topics }) as any
-            out.push({ eventName: d.eventName, args: d.args, transactionHash: l.transactionHash!, blockNumber: l.blockNumber! })
-          } catch {}
+        const head = await pc.getBlockNumber()
+        const cached = logCache.get(key)
+        let from = cached ? cached.to + 1n : FACTORY_BLOCK
+        const out = cached ? [...cached.logs] : []
+        while (from <= head) {
+          const to = from + LOG_CHUNK - 1n < head ? from + LOG_CHUNK - 1n : head
+          const raw: Log[] = await pc.getLogs({ address, fromBlock: from, toBlock: to })
+          for (const l of raw) {
+            try {
+              const d = decodeEventLog({ abi, data: l.data, topics: l.topics }) as any
+              out.push({ eventName: d.eventName, args: d.args, transactionHash: l.transactionHash!, blockNumber: l.blockNumber! })
+            } catch {
+              /* event from another ABI version: skip */
+            }
+          }
+          logCache.set(key, { to, logs: out.slice() })
+          from = to + 1n
         }
-        if (!dead) setLogs(out)
-      } catch {
-        if (!dead) setLogs([])
+        if (!dead) setState({ logs: out })
+      } catch (e) {
+        if (!dead) setState((s) => ({ logs: s.logs, error: (e as Error)?.message?.split("\n")[0] ?? "Couldn't load history" }))
       }
     }
     load()
@@ -238,7 +260,7 @@ export function useLogs(address: Address | undefined, abi: Abi, refreshKey = 0) 
       clearInterval(t)
     }
   }, [pc, address, abi, refreshKey])
-  return logs
+  return state
 }
 
 /** Human-readable revert reason. */
@@ -272,44 +294,72 @@ export function errorText(e: unknown): string {
   return (e as Error)?.message ?? String(e)
 }
 
-/** writeContract + wait for receipt, with status. */
+/**
+ * Simulate, then writeContract pinned to the app chain, then wait for the receipt.
+ * - Simulation runs eth_call, which returns revert data on Mezo (eth_estimateGas does not), so
+ *   custom errors decode into readable messages before the wallet even opens.
+ * - If the wallet is on another chain it is asked to switch first; writes never go to another chain.
+ * - A second send while one is in flight is ignored.
+ */
 export function useTx(onDone?: (receipt: any) => void) {
   const { writeContractAsync, isPending, reset } = useWriteContract()
+  const { address, chainId: walletChain } = useAccount()
+  const { switchChainAsync } = useSwitchChain()
+  const pc = usePublicClient({ chainId: chain.id })
   const [hash, setHash] = useState<`0x${string}`>()
   const [error, setError] = useState<string>()
-  const receipt = useWaitForTransactionReceipt({ hash })
+  const [preparing, setPreparing] = useState(false)
+  const inflight = useRef(false)
+  const receipt = useWaitForTransactionReceipt({ hash, chainId: chain.id })
   useEffect(() => {
     if (receipt.data) onDone?.(receipt.data)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [receipt.data])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const send = async (args: any) => {
+    if (inflight.current) return
+    inflight.current = true
     setError(undefined)
     setHash(undefined)
+    setPreparing(true)
     try {
-      const h = await writeContractAsync(args)
+      if (!address) throw new Error("Connect a wallet first.")
+      if (walletChain !== chain.id) {
+        try {
+          await switchChainAsync({ chainId: chain.id })
+        } catch {
+          throw new Error(`Switch your wallet to ${chain.name} to continue.`)
+        }
+      }
+      if (pc) await pc.simulateContract({ ...args, account: address })
+      const h = await writeContractAsync({ ...args, chainId: chain.id })
       setHash(h)
       return h
     } catch (e) {
       setError(errorText(e))
       reset()
+    } finally {
+      setPreparing(false)
+      inflight.current = false
     }
   }
   return {
     send,
     hash,
     error: error ?? (receipt.error ? errorText(receipt.error) : undefined),
-    busy: isPending || (!!hash && receipt.isLoading),
+    busy: preparing || isPending || (!!hash && receipt.isLoading),
     done: receipt.isSuccess,
     receipt: receipt.data,
   }
 }
 
+/** True when a wallet is connected on a chain other than the app's. */
+export function useWrongChain() {
+  const { isConnected, chainId } = useAccount()
+  return isConnected && chainId !== undefined && chainId !== chain.id
+}
+
 export function useMe() {
   const { address, isConnected } = useAccount()
   return { me: address, isConnected }
-}
-
-export function useCircuit() {
-  return { address: CIRCUIT, abi: parCircuitAbi } as const
 }

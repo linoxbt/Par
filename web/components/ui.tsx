@@ -221,10 +221,12 @@ export function Meter({ value, tone = "fg" }: { value: number; tone?: "fg" | "bt
 /** Segmented control. */
 export function Segmented<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
   return (
-    <div className="inline-flex rounded-full border border-line bg-soft p-1">
+    <div role="group" className="inline-flex rounded-full border border-line bg-soft p-1">
       {options.map((o) => (
         <button
           key={o.value}
+          type="button"
+          aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={`rounded-full px-4 py-1.5 text-sm transition ${value === o.value ? "bg-white font-medium text-fg shadow-card" : "text-muted hover:text-fg"}`}
         >
@@ -247,6 +249,21 @@ export function NotDeployed() {
           header is live from Mezo&apos;s MUSD contracts. To try the full flow, run it locally with <span className="num text-fg">./scripts/dev-local.sh</span>.
         </p>
       </div>
+    </div>
+  )
+}
+
+/** Inline error / not-found state for app pages (bad links, missing contracts, failed reads). */
+export function Problem({ title, children, action }: { title: string; children?: React.ReactNode; action?: { href: string; label: string } }) {
+  return (
+    <div className="mx-auto max-w-lg rounded-2xl border border-line bg-white p-8 text-center">
+      <div className="text-lg font-medium">{title}</div>
+      {children && <div className="mt-2 text-sm leading-relaxed text-muted">{children}</div>}
+      {action && (
+        <a href={action.href} className="mt-5 inline-block rounded-full bg-fg px-5 py-2.5 text-sm font-medium text-white hover:bg-black/80">
+          {action.label}
+        </a>
+      )}
     </div>
   )
 }

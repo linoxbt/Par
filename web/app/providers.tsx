@@ -41,6 +41,10 @@ const mezoAppKitNetwork = defineAppKitChain({
   contracts: { multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11" } },
 })
 
+// Passport names its Bitcoin OKX connector plain "OKX"; label it so it isn't confused with OKX's EVM wallet.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const btcLabel = (w: any) => (opts: any) => ({ ...w(opts), name: `${w(opts).name} (Bitcoin)` })
+
 function makeAppKitConfig(): Config {
   // Mezo Passport's Bitcoin wallets (Xverse, Unisat, OKX), routed through a Mezo smart account.
   const bitcoinConnectors = connectorsForWallets(
@@ -48,8 +52,8 @@ function makeAppKitConfig(): Config {
       {
         groupName: "Bitcoin",
         wallets: mainnet
-          ? [xverseWalletMezoMainnet, unisatWalletMezoMainnet, okxWalletMezoMainnet]
-          : [xverseWalletMezoTestnet, unisatWalletMezoTestnet, okxWalletMezoTestnet],
+          ? [xverseWalletMezoMainnet, unisatWalletMezoMainnet, okxWalletMezoMainnet].map(btcLabel)
+          : [xverseWalletMezoTestnet, unisatWalletMezoTestnet, okxWalletMezoTestnet].map(btcLabel),
       },
     ],
     { appName: "Par", projectId: REOWN_PROJECT_ID! },
