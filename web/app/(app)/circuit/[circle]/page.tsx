@@ -275,6 +275,7 @@ function CircleBoard({ circleId }: { circleId: bigint }) {
 function status(r: any) {
   const net = r.net as bigint
   if (!r.active) return <Badge tone="muted">Removed</Badge>
+  if (r.suspended && (r.net as bigint) === 0n) return <Badge tone="bad">Suspended</Badge>
   if (net < 0n) return r.settled ? <Badge tone="ok">Paid</Badge> : <Badge tone="warn">Owes</Badge>
   if (net > 0n) return r.settled ? <Badge tone="ok">Claimed</Badge> : r.claimed > 0n ? <Badge tone="btc">Partly claimed</Badge> : <Badge tone="btc">Receives</Badge>
   return <Badge tone="muted">Even</Badge>
@@ -284,11 +285,12 @@ function useMemberActions(circleId: bigint, cycle: bigint, r: any, onDone: () =>
   const t = useTx(onDone)
   const force = () => t.send({ address: CIRCUIT, abi: parCircuitAbi, functionName: "forceSettle", args: [circleId, cycle, r.member, Z, Z] })
   const remove = () => t.send({ address: CIRCUIT, abi: parCircuitAbi, functionName: "removeMember", args: [circleId, r.member] })
-  return { t, force, remove }
+  const suspend = () => t.send({ address: CIRCUIT, abi: parCircuitAbi, functionName: "setSuspended", args: [circleId, r.member, !r.suspended] })
+  return { t, force, remove, suspend }
 }
 
 function MemberRow({ i, r, circleId, cycle, forceable, isAdmin, onDone }: { i: number; r: any; circleId: bigint; cycle: bigint; forceable: boolean; isAdmin: boolean; onDone: () => void }) {
-  const { t, force, remove } = useMemberActions(circleId, cycle, r, onDone)
+  const { t, force, remove, suspend } = useMemberActions(circleId, cycle, r, onDone)
   const net = r.net as bigint
   return (
     <tr className="border-t border-line">
@@ -312,6 +314,11 @@ function MemberRow({ i, r, circleId, cycle, forceable, isAdmin, onDone }: { i: n
               Force-settle
             </Button>
           )}
+          {isAdmin && r.active && (
+            <Button variant="ghost" size="sm" busy={t.busy} onClick={suspend}>
+              {r.suspended ? "Unsuspend" : "Suspend"}
+            </Button>
+          )}
           {isAdmin && r.active && net === 0n && (
             <Button variant="ghost" size="sm" busy={t.busy} onClick={remove}>
               Remove
@@ -325,7 +332,7 @@ function MemberRow({ i, r, circleId, cycle, forceable, isAdmin, onDone }: { i: n
 }
 
 function MemberCard({ i, r, circleId, cycle, forceable, isAdmin, onDone }: { i: number; r: any; circleId: bigint; cycle: bigint; forceable: boolean; isAdmin: boolean; onDone: () => void }) {
-  const { t, force, remove } = useMemberActions(circleId, cycle, r, onDone)
+  const { t, force, remove, suspend } = useMemberActions(circleId, cycle, r, onDone)
   const net = r.net as bigint
   return (
     <div className="rounded-xl border border-line p-3 text-sm">
@@ -352,11 +359,16 @@ function MemberCard({ i, r, circleId, cycle, forceable, isAdmin, onDone }: { i: 
       <div className="mt-2 text-xs text-muted">
         Vault <Addr a={r.vault} /> · line #{String(r.lineId ?? "")}
       </div>
-      {(net < 0n && !r.settled && forceable) || (isAdmin && r.active && net === 0n) ? (
+      {(net < 0n && !r.settled && forceable) || (isAdmin && r.active) ? (
         <div className="mt-3 flex gap-2">
           {net < 0n && !r.settled && forceable && (
             <Button variant="danger" busy={t.busy} onClick={force} className="flex-1">
               Force-settle
+            </Button>
+          )}
+          {isAdmin && r.active && (
+            <Button variant="ghost" busy={t.busy} onClick={suspend} className="flex-1">
+              {r.suspended ? "Unsuspend" : "Suspend"}
             </Button>
           )}
           {isAdmin && r.active && net === 0n && (

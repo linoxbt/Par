@@ -286,6 +286,18 @@ export function errorText(e: unknown): string {
         Done: "Nothing to do.",
         WrongCycle: "This invoice belongs to a closed cycle; re-issue it.",
         BadParams: "Invalid parameters.",
+        ClaimOpen: "A claim is open on this commitment; it has to be paid or resolved first.",
+        ReserveLocked: "Mezo is in Recovery Mode: the BTC reserve stays in the vault while promises are live.",
+        LineOwed: "The circuit is still owed on this line; it can be closed once that debt is paid.",
+        Suspended: "This member is suspended in the circle: no new invoices to or from them.",
+        LineInUse: "That clearing line already backs a circle membership.",
+        HasObligations: "This member still owes or is owed in an open cycle.",
+        LineExpiresTooSoon: "The clearing line expires before this cycle's settlement deadline; pledge a longer line.",
+        NotParVault: "That address isn't a Par vault.",
+        NotInvited: "There's no matching invite for this vault and line.",
+        NotMember: "Not a member of this circle.",
+        NotAdmin: "Only the circle admin can do this.",
+        NotVault: "Only Par vaults can do this.",
       }
       if (name) return (map[name] ?? name) + (args?.length ? ` (${args.map(String).join(", ")})` : "")
       if (r.reason) return r.reason

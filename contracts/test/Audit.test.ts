@@ -302,9 +302,10 @@ describe("Par audit regressions", () => {
       await contracts.musd.connect(dennis.wallet).approve(cAddr, to1e18("400"))
       await expect(circuit.connect(dennis.wallet).settle(0, 0)).to.emit(circuit, "Settled").withArgs(0, 0, dennis.address, to1e18("400"), false)
 
-      // the keeper is late: alice's line expired before anyone force-settled her
+      // no keeper runs: alice's line expires with her debt still booked on it. Nobody can close the line
+      // to free her capacity while the circuit is owed (NEW-1), and creditors must wait for finalAt.
       await fastForwardTime(200)
-      await expect(circuit.forceSettle(0, 0, alice.address, Z, Z)).to.be.revertedWithCustomError(va, "TooLate")
+      await expect(va.connect(eric.wallet).closeCommitment(0)).to.be.revertedWithCustomError(va, "LineOwed")
       await expect(circuit.connect(bob.wallet).claim(0, 0)).to.be.revertedWithCustomError(circuit, "NotYet")
 
       // one full cycle after the force-settle window opens, the cycle is final
@@ -334,6 +335,56 @@ describe("Par audit regressions", () => {
       expect(await circuit.settled(0, 0, bob.address)).to.equal(true)
       expect(await contracts.musd.balanceOf(cAddr)).to.equal(0n)
       await expect(circuit.connect(bob.wallet).claim(0, 0)).to.be.revertedWithCustomError(circuit, "Done")
+    })
+  })
+
+  describe("final review fixes", () => {
+    it("NEW-1: debt booked before expiry stays drawable after it; the expired line can't be closed until it is paid", async () => {
+      const va = await newVault(alice, to1e18("1"), to1e18("2000"))
+      const vb = await newVault(bob, to1e18("1"), to1e18("2000"))
+      await circuit.createCircle(300, 60)
+      const close0 = await circuit.cycleClose(0, 0)
+      // alice times her line to expire exactly when force-settle opens (the minimum the circuit accepts)
+      await addAndJoin(0, alice, va, await line(va, alice, "500", close0 + 60n))
+      await addAndJoin(0, bob, vb, await line(vb, bob, "500", close0 + 30n * 86400n))
+      await circuit.connect(bob.wallet).createInvoice(0, alice.address, to1e18("300"), ethers.id("x"))
+      await circuit.connect(alice.wallet).acceptInvoice(0)
+      // the keeper is a day late: the line has long expired
+      await fastForwardTime(Number(close0) - (await getLatestBlockTimestamp()) + 86400)
+      await expect(va.connect(eric.wallet).closeCommitment(0)).to.be.revertedWithCustomError(va, "LineOwed")
+      await expect(circuit.connect(eric.wallet).forceSettle(0, 0, alice.address, Z, Z)).to.emit(circuit, "Settled")
+      expect(await circuit.outstanding(await va.getAddress(), 0)).to.equal(0n)
+      expect(await circuit.collected(0, 0)).to.equal(to1e18("300"))
+      await expect(circuit.connect(bob.wallet).claim(0, 0)).to.emit(circuit, "Claimed").withArgs(0, 0, bob.address, to1e18("300"))
+      // now that nothing is owed, anyone can close the expired line and free alice's capacity
+      await expect(va.connect(eric.wallet).closeCommitment(0)).to.emit(va, "CommitmentClosed")
+      expect(await va.reserved()).to.equal(0n)
+    })
+
+    it("NEW-2: the admin can suspend a defaulter: no new invoices either way; settling and claiming still work", async () => {
+      const va = await newVault(alice, to1e18("1"), to1e18("2000"))
+      const vb = await newVault(bob, to1e18("1"), to1e18("2000"))
+      await circuit.createCircle(300, 60)
+      const far = (await circuit.cycleClose(0, 0)) + 30n * 86400n
+      await addAndJoin(0, alice, va, await line(va, alice, "500", far))
+      await addAndJoin(0, bob, vb, await line(vb, bob, "500", far))
+      await circuit.connect(bob.wallet).createInvoice(0, alice.address, to1e18("100"), ethers.id("a"))
+      await expect(circuit.connect(bob.wallet).setSuspended(0, alice.address, true)).to.be.revertedWithCustomError(circuit, "NotAdmin")
+      await expect(circuit.setSuspended(0, alice.address, true)).to.emit(circuit, "MemberSuspended").withArgs(0, alice.address, true)
+      await expect(circuit.connect(alice.wallet).acceptInvoice(0)).to.be.revertedWithCustomError(circuit, "Suspended")
+      await expect(circuit.connect(alice.wallet).createInvoice(0, bob.address, to1e18("1"), ethers.id("b"))).to.be.revertedWithCustomError(circuit, "Suspended")
+      await expect(circuit.connect(bob.wallet).createInvoice(0, alice.address, to1e18("1"), ethers.id("c"))).to.be.revertedWithCustomError(circuit, "Suspended")
+      await circuit.setSuspended(0, alice.address, false)
+      await circuit.connect(alice.wallet).acceptInvoice(0)
+      expect(await circuit.outstanding(await va.getAddress(), 0)).to.equal(to1e18("100"))
+    })
+
+    it("L-c: the arbiter can't be the principal either", async () => {
+      const v = await newVault(alice, to1e18("1"), to1e18("2000"))
+      const now = await getLatestBlockTimestamp()
+      await expect(
+        v.connect(alice.wallet).createClaim(bob.address, carol.address, carol.address, to1e18("100"), now + 86400, 60),
+      ).to.be.revertedWithCustomError(v, "BadParams")
     })
   })
 
@@ -513,9 +564,11 @@ describe("Par audit regressions", () => {
       v.connect(alice.wallet).createScheduled(bob.address, carol.address, to1e18("100"), start, 120, 10, 3, to1e18("300"), expiry)
     await expect(mk(now + 60, now + 200)).to.be.revertedWithCustomError(v, "BadParams") // last due now+300
     await expect(mk(now + 60, now + 60 + 240 + 10)).to.be.revertedWithCustomError(v, "BadParams") // empty trigger window
+    await expect(mk(now + 60, now + 60 + 240 + 10 + 299)).to.be.revertedWithCustomError(v, "BadParams") // window < MIN_TRIGGER_WINDOW
     await expect(mk(now - 10, now + 3600)).to.be.revertedWithCustomError(v, "BadParams") // start in the past
-    await mk(now + 60, now + 60 + 240 + 11) // the tightest accepted expiry
-    await network.provider.send("evm_setNextBlockTimestamp", [now + 60 + 240 + 11])
+    expect(await v.MIN_TRIGGER_WINDOW()).to.equal(300n)
+    await mk(now + 60, now + 60 + 240 + 10 + 300) // the tightest accepted expiry: a 5-minute trigger window
+    await network.provider.send("evm_setNextBlockTimestamp", [now + 60 + 240 + 10 + 300])
     await v.triggerMissed(0, 2, Z, Z) // the last installment is still covered, at expiry itself
   })
 

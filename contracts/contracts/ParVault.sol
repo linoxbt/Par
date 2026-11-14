@@ -6,6 +6,11 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IBorrowerOperations, ITroveManager, IPriceFeed} from "./interfaces/IMezo.sol";
 
+/// @dev Implemented by ParCircuit: debt already booked against a clearing line.
+interface ILineHolder {
+    function outstanding(address vault, uint256 lineId) external view returns (uint256);
+}
+
 /// @dev Hook the factory exposes so vaultsOf() follows ownership transfers.
 interface IParFactoryHook {
     function onVaultOwnerChanged(address from, address to) external;
@@ -83,6 +88,9 @@ contract ParVault is ReentrancyGuard {
     uint256 private constant RM_EPSILON = 1e15; // +0.1% so new ICR strictly improves
     /// @notice Shortest allowed challenge window for Claim commitments.
     uint32 public constant MIN_CHALLENGE_WINDOW = 60;
+    /// @notice A scheduled commitment must stay live this long after its last trigger time, so the
+    ///         last installment can actually be triggered (not a 1-second window).
+    uint32 public constant MIN_TRIGGER_WINDOW = 300;
     /// @notice An arbiter has this long after a dispute to resolve it. After that anyone may
     ///         finalize the claim with the default outcome: APPROVE and pay. The owner chose the
     ///         arbiter, so an absent arbiter is the owner's risk, not the beneficiary's.
@@ -127,6 +135,7 @@ contract ParVault is ReentrancyGuard {
     error ReservedCommitments();
     error ClaimOpen();
     error ReserveLocked();
+    error LineOwed();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -270,11 +279,11 @@ contract ParVault is ReentrancyGuard {
         uint64 expiry
     ) external onlyOwner returns (uint256 id) {
         // Every installment must be triggerable before expiry: the last one becomes
-        // triggerable strictly after lastDue + grace, so expiry must lie beyond that.
+        // triggerable after lastDue + grace, and stays so for at least MIN_TRIGGER_WINDOW.
         if (
             beneficiary == address(0) || installment == 0 || count == 0 || period == 0 || coverCap == 0
                 || coverCap > uint256(installment) * count || start < block.timestamp
-                || expiry <= uint256(start) + uint256(count - 1) * period + grace
+                || expiry < uint256(start) + uint256(count - 1) * period + grace + MIN_TRIGGER_WINDOW
         ) revert BadParams();
         id = _newCommitment(Kind.Scheduled, beneficiary, principal, address(0), coverCap, expiry);
         Commitment storage c = commitments[id];
@@ -295,6 +304,7 @@ contract ParVault is ReentrancyGuard {
     ) external onlyOwner returns (uint256 id) {
         if (
             beneficiary == address(0) || arbiter == address(0) || arbiter == owner || arbiter == beneficiary
+                || arbiter == principal
                 || cap == 0 || expiry <= block.timestamp || challengeWindow < MIN_CHALLENGE_WINDOW
         ) revert BadParams();
         id = _newCommitment(Kind.Claim, beneficiary, principal, arbiter, cap, expiry);
@@ -425,11 +435,13 @@ contract ParVault is ReentrancyGuard {
     // ---------------- Clearing line ----------------
 
     /// @notice Only the circuit (beneficiary) can draw; MUSD goes to the circuit.
+    ///         No expiry check here: the circuit only books new debt against a line while it is
+    ///         live, and debt booked before expiry must stay collectable however late the
+    ///         force-settle runs (a line can't be timed to expire as the draw window opens).
     function drawLine(uint256 id, uint256 amount, address up, address lo) external nonReentrant {
         Commitment storage c = commitments[id];
         if (c.kind != Kind.ClearingLine || c.status != CStatus.Active) revert NotActive();
         if (msg.sender != c.beneficiary) revert NotAuthorized();
-        if (block.timestamp > c.expiry) revert TooLate();
         _payout(id, amount, up, lo);
     }
 
@@ -442,6 +454,12 @@ contract ParVault is ReentrancyGuard {
         if (c.status != CStatus.Active) revert NotActive();
         if (pendingClaims[id].open) revert ClaimOpen();
         if (block.timestamp <= c.expiry && msg.sender != c.beneficiary) revert NotAuthorized();
+        // An expired clearing line stays reserved while its circuit still has debt booked on it.
+        if (c.kind == Kind.ClearingLine && msg.sender != c.beneficiary) {
+            try ILineHolder(c.beneficiary).outstanding(address(this), id) returns (uint256 owed) {
+                if (owed != 0) revert LineOwed();
+            } catch {}
+        }
         uint256 released = uint256(c.cap) - c.paidOut;
         c.status = CStatus.Closed;
         reserved -= released;

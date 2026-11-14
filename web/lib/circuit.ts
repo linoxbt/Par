@@ -116,7 +116,7 @@ export function useCircle(circleId: bigint, cycle: bigint | undefined, me?: Addr
   const invite = base.data?.[2] as readonly [Address, bigint, boolean] | undefined
   const cyc = cycle ?? current ?? 0n
 
-  const K = 6
+  const K = 7
   const perMember = useReadContracts({
     contracts: members.flatMap((m) => [
       { ...C, functionName: "net" as const, args: [circleId, cyc, m] as const },
@@ -125,6 +125,7 @@ export function useCircle(circleId: bigint, cycle: bigint | undefined, me?: Addr
       { ...C, functionName: "members" as const, args: [circleId, m] as const },
       { ...C, functionName: "claimed" as const, args: [circleId, cyc, m] as const },
       { ...C, functionName: "lineHeadroom" as const, args: [circleId, m] as const },
+      { ...C, functionName: "suspended" as const, args: [circleId, m] as const },
     ]),
     allowFailure: true,
     query: { enabled: exists && members.length > 0, refetchInterval: 6_000 },
@@ -158,6 +159,7 @@ export function useCircle(circleId: bigint, cycle: bigint | undefined, me?: Addr
         active: mem?.[2] ?? true,
         claimed: r<bigint>(4) ?? 0n,
         headroom: r<bigint>(5) ?? 0n,
+        suspended: r<boolean>(6) ?? false,
       }
     })
     // removed members stay listed onchain; hide them unless they still have a position in this cycle

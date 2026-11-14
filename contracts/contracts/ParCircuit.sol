@@ -19,7 +19,9 @@ import {ParFactory} from "./ParFactory.sol";
 ///         Line accounting: a ClearingLine (vault, lineId) can back at most ONE membership
 ///         at a time (across all circles). `outstanding[vault][lineId]` is the sum of that
 ///         member's unsettled negative nets over ALL cycles, kept incrementally, and every
-///         accepted invoice keeps it <= the line's available() amount. So every obligation
+///         accepted invoice keeps it <= the line's available() amount. Lines must be live when
+///         debt is booked; once booked it stays drawable after the line's expiry (the vault
+///         refuses to close an expired line while debt is outstanding). So every obligation
 ///         the circuit records can be drawn, however late the keeper runs.
 ///
 ///         Terminal fallback: a cycle is final at finalAt = close + settleWindow + cycleLength.
@@ -77,6 +79,9 @@ contract ParCircuit is ReentrancyGuard {
     mapping(uint256 => address[]) public memberList; // everyone who ever joined (see members(c, m).active)
     mapping(uint256 => mapping(address => bool)) internal listed;
     mapping(uint256 => mapping(address => Invite)) public invites;
+    /// @notice Admin can suspend a member (e.g. a defaulter): no new invoices to or from them.
+    ///         They can still settle, be force-settled and claim what they are owed.
+    mapping(uint256 => mapping(address => bool)) public suspended;
     mapping(uint256 => Invoice) public invoices;
 
     // circleId => cycle => member => net (positive = receives, negative = owes)
@@ -98,6 +103,7 @@ contract ParCircuit is ReentrancyGuard {
     event MemberInvited(uint256 indexed circleId, address indexed member, address vault, uint256 lineId);
     event MemberJoined(uint256 indexed circleId, address indexed member, address vault, uint256 lineId);
     event MemberRemoved(uint256 indexed circleId, address indexed member);
+    event MemberSuspended(uint256 indexed circleId, address indexed member, bool suspended);
     event InvoiceCreated(
         uint256 indexed id,
         uint256 indexed circleId,
@@ -125,6 +131,7 @@ contract ParCircuit is ReentrancyGuard {
     error HasObligations();
     error LineExpiresTooSoon(uint256 expiry, uint256 needed);
     error NotParVault();
+    error Suspended();
 
     constructor(ParFactory _factory) {
         factory = _factory;
@@ -176,6 +183,15 @@ contract ParCircuit is ReentrancyGuard {
 
     /// @notice Admin removes a member, or a member leaves. Only with no outstanding obligations
     ///         and a zero net in the current and previous cycle. Frees the line.
+    /// @notice Admin only. Stops a member from billing or being billed; existing obligations
+    ///         stay collectable (settle / forceSettle) and their credits stay claimable.
+    function setSuspended(uint256 circleId, address member, bool value) external {
+        if (msg.sender != circles[circleId].admin) revert NotAdmin();
+        if (!members[circleId][member].active) revert NotMember();
+        suspended[circleId][member] = value;
+        emit MemberSuspended(circleId, member, value);
+    }
+
     function removeMember(uint256 circleId, address member) external {
         if (msg.sender != circles[circleId].admin && msg.sender != member) revert NotAdmin();
         Member storage m = members[circleId][member];
@@ -246,6 +262,7 @@ contract ParCircuit is ReentrancyGuard {
         returns (uint256 id)
     {
         if (!members[circleId][msg.sender].active || !members[circleId][debtor].active) revert NotMember();
+        if (suspended[circleId][msg.sender] || suspended[circleId][debtor]) revert Suspended();
         if (amount == 0 || debtor == msg.sender) revert BadParams();
         uint64 cyc = currentCycle(circleId);
         id = nextInvoiceId++;
@@ -261,6 +278,7 @@ contract ParCircuit is ReentrancyGuard {
         if (inv.status != InvStatus.Pending) revert BadParams();
         if (msg.sender != inv.debtor) revert NotMember();
         uint256 cid = inv.circleId;
+        if (suspended[cid][inv.debtor] || suspended[cid][inv.creditor]) revert Suspended();
         uint64 cyc = inv.cycle;
         if (currentCycle(cid) != cyc) revert WrongCycle(); // stale invoices must be re-issued
         Member storage d = members[cid][msg.sender];

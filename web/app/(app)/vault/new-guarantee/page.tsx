@@ -129,7 +129,7 @@ function Builder() {
   const prinAddr = (principal.trim() ? principal : me) as Address
   const isOwner = !v?.owner || lc(v.owner) === lc(me)
   const capTooBig = type === "rent" && instWei !== undefined && countN !== undefined && capWei > instWei * BigInt(countN)
-  const arbOk = isAddress(arbiter) && lc(arbiter) !== lc(v?.owner ?? me) && lc(arbiter) !== lc(beneficiary)
+  const arbOk = isAddress(arbiter) && lc(arbiter) !== lc(v?.owner ?? me) && lc(arbiter) !== lc(beneficiary) && lc(arbiter) !== lc(prinAddr)
   const problem = !isOwner
     ? "Only the vault owner can make promises from this vault."
     : beneficiary && !benOk
@@ -149,7 +149,7 @@ function Builder() {
                     ? "Cover cap can't exceed installment × count."
                     : undefined
             : arbiter && !arbOk
-              ? "The arbiter must be a valid address that isn't you or the beneficiary."
+              ? "The arbiter must be a valid address that isn't you, the beneficiary or the principal."
               : bondDaysN === undefined
                 ? "Validity must be a whole number of days."
                 : windowSec === undefined || windowSec < 60
@@ -254,7 +254,7 @@ function Builder() {
               </>
             ) : (
               <>
-                <Field label="Arbiter" hint="Decides disputed claims. Can't be you or the beneficiary. If they don't decide in time, the claim pays.">
+                <Field label="Arbiter" hint="Decides disputed claims. Can't be you, the beneficiary or the principal. If they don't decide within 7 days, the claim pays.">
                   <input className={inputCls} placeholder="0x…" value={arbiter} onChange={(e) => setArbiter(e.target.value)} />
                 </Field>
                 <div className="grid grid-cols-3 gap-4">

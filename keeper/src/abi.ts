@@ -368,6 +368,11 @@ export const parVaultAbi = [
   },
   {
     "inputs": [],
+    "name": "LineOwed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NotActive",
     "type": "error"
   },
@@ -738,6 +743,19 @@ export const parVaultAbi = [
   {
     "inputs": [],
     "name": "MIN_CHALLENGE_WINDOW",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MIN_TRIGGER_WINDOW",
     "outputs": [
       {
         "internalType": "uint32",
@@ -1891,6 +1909,11 @@ export const parCircuitAbi = [
   },
   {
     "inputs": [],
+    "name": "Suspended",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "WrongCycle",
     "type": "error"
   },
@@ -2153,6 +2176,31 @@ export const parCircuitAbi = [
       }
     ],
     "name": "MemberRemoved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "circleId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "member",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "suspended",
+        "type": "bool"
+      }
+    ],
+    "name": "MemberSuspended",
     "type": "event"
   },
   {
@@ -2972,6 +3020,29 @@ export const parCircuitAbi = [
         "type": "uint256"
       },
       {
+        "internalType": "address",
+        "name": "member",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "value",
+        "type": "bool"
+      }
+    ],
+    "name": "setSuspended",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "circleId",
+        "type": "uint256"
+      },
+      {
         "internalType": "uint64",
         "name": "cycle",
         "type": "uint64"
@@ -3001,6 +3072,30 @@ export const parCircuitAbi = [
       }
     ],
     "name": "settled",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "suspended",
     "outputs": [
       {
         "internalType": "bool",

@@ -217,7 +217,11 @@ function decodeRevert(e: unknown): { name: string; args: readonly unknown[] } | 
 }
 
 // label -> tx hash still waiting to be mined (prevents re-sending after a receipt timeout)
-const pending = new Map<string, `0x${string}`>()
+const pending = new Map<string, { hash: `0x${string}`; at: number }>()
+const DROPPED_AFTER_MS = 10 * 60_000
+// after MAX_RETRIES consecutive failures a job backs off to one attempt every BACKOFF_TICKS ticks
+// (it never gives up: a Recovery Mode reserve may be funded hours later)
+const BACKOFF_TICKS = 20
 // label -> consecutive failures
 const failures = new Map<string, number>()
 
@@ -227,15 +231,25 @@ type Ctx = { vault: Address; owner?: Address }
 async function execute(label: string, req: Parameters<typeof pc.simulateContract>[0], ctx: Ctx): Promise<boolean> {
   const prev = pending.get(label)
   if (prev) {
-    const rc = await pc.getTransactionReceipt({ hash: prev }).catch(() => undefined)
-    if (!rc) return false // still in flight: don't double-submit
-    pending.delete(label)
-    if (rc.status === "success") return true
+    const rc = await pc.getTransactionReceipt({ hash: prev.hash }).catch(() => undefined)
+    if (!rc) {
+      // still in flight: don't double-submit, unless the node no longer knows the tx (dropped)
+      if (Date.now() - prev.at < DROPPED_AFTER_MS) return false
+      const tx = await pc.getTransaction({ hash: prev.hash }).catch(() => undefined)
+      if (tx) return false
+      log(`${label}: tx ${prev.hash} was dropped; retrying`)
+      pending.delete(label)
+    } else {
+      pending.delete(label)
+      if (rc.status === "success") return true
+    }
   }
+  const fails = failures.get(label) ?? 0
+  if (fails >= MAX_RETRIES && ticks % BACKOFF_TICKS !== 0) return false
   try {
     const { request } = await pc.simulateContract({ ...req, account } as any)
     const hash = await wc.writeContract(request as any)
-    pending.set(label, hash)
+    pending.set(label, { hash, at: Date.now() })
     const rc = await pc.waitForTransactionReceipt({ hash, timeout: 120_000 })
     pending.delete(label)
     const url = chain.blockExplorers?.default.url
@@ -258,7 +272,7 @@ async function execute(label: string, req: Parameters<typeof pc.simulateContract
         vault: ctx.vault,
         owner,
         btcNeeded: formatEther(err.args[0] as bigint),
-        action: "Send the BTC to the vault as idle reserve; the keeper retries automatically.",
+        action: "Send the BTC to the vault as idle reserve; the keeper keeps retrying (backing off after repeated failures).",
       })
     } else if (err) {
       log(`${label} skipped: ${err.name}${err.args.length ? ` (${err.args.map(String).join(", ")})` : ""}`)
@@ -339,11 +353,31 @@ async function vaultJobs(vault: Address, now: bigint) {
     }
     anyActive = true
 
+    // Claims first: executeClaim has no expiry check, so a claim filed near expiry (or a dispute
+    // whose 7-day arbiter deadline runs past it) must still be paid.
+    let claimOpen = false
+    if (c.kind === Kind.Claim) {
+      const p = await pendingClaim(vault, id)
+      claimOpen = p.open
+      resolveWindow ??= await pc.readContract({ address: vault, abi: parVaultAbi, functionName: "RESOLVE_WINDOW" }).catch(() => 7n * 86400n)
+      const undisputedDue = !p.disputed && now > p.filedAt + BigInt(c.challengeWindow)
+      // An arbiter who doesn't decide within RESOLVE_WINDOW forfeits: anyone can execute (default: pay).
+      const arbiterLapsed = p.disputed && p.disputedAt > 0n && now > p.disputedAt + resolveWindow
+      if (p.open && (undisputedDue || arbiterLapsed)) {
+        const { upper, lower } = await hintsForDraw(vault, p.amount)
+        await execute(`executeClaim ${vault}#${id}`, { address: vault, abi: parVaultAbi, functionName: "executeClaim", args: [id, upper, lower] } as any, { vault })
+      }
+    }
+
     if (now > c.expiry) {
-      // Past expiry nothing can pay. Free the reserved capacity (permissionless) unless a claim is open.
-      if (AUTO_CLOSE_EXPIRED) {
-        const open = c.kind === Kind.Claim ? (await pendingClaim(vault, id)).open : false
-        if (!open) await execute(`closeCommitment ${vault}#${id}`, { address: vault, abi: parVaultAbi, functionName: "closeCommitment", args: [id] } as any, { vault })
+      // Past expiry nothing new can be triggered. Free the reserved capacity (permissionless), unless
+      // a claim is still open or the circuit is still owed on a clearing line (the vault refuses both).
+      if (AUTO_CLOSE_EXPIRED && !claimOpen) {
+        let owed = 0n
+        if (c.kind === Kind.ClearingLine && CIRCUIT && c.beneficiary.toLowerCase() === CIRCUIT.toLowerCase())
+          owed = (await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "outstanding", args: [vault, id] })) as bigint
+        if (owed === 0n)
+          await execute(`closeCommitment ${vault}#${id}`, { address: vault, abi: parVaultAbi, functionName: "closeCommitment", args: [id] } as any, { vault })
       }
       continue
     }
@@ -375,17 +409,6 @@ async function vaultJobs(vault: Address, now: bigint) {
       }
     }
 
-    if (c.kind === Kind.Claim) {
-      const p = await pendingClaim(vault, id)
-      resolveWindow ??= await pc.readContract({ address: vault, abi: parVaultAbi, functionName: "RESOLVE_WINDOW" }).catch(() => 7n * 86400n)
-      const undisputedDue = !p.disputed && now > p.filedAt + BigInt(c.challengeWindow)
-      // An arbiter who doesn't decide within RESOLVE_WINDOW forfeits: anyone can execute (default: pay).
-      const arbiterLapsed = p.disputed && p.disputedAt > 0n && now > p.disputedAt + resolveWindow
-      if (p.open && (undisputedDue || arbiterLapsed)) {
-        const { upper, lower } = await hintsForDraw(vault, p.amount)
-        await execute(`executeClaim ${vault}#${id}`, { address: vault, abi: parVaultAbi, functionName: "executeClaim", args: [id, upper, lower] } as any, { vault })
-      }
-    }
   }
 
   // Health watch: only meaningful while something is reserved. Alert on change, not every tick.
@@ -427,11 +450,23 @@ async function pendingClaim(vault: Address, id: bigint) {
 
 /**
  * Circuit force-settle. ParCircuit tracks each member line's unsettled debt across every cycle
- * (`outstanding[vault][lineId]`). Members with nothing outstanding cost one read; for the rest the
- * keeper walks back from the newest closed cycle and force-settles each unsettled negative net
- * until it has accounted for the whole outstanding amount. Nothing is persisted, nothing is
- * skipped after a restart or downtime, and one failing debtor never blocks the others.
+ * (`outstanding[vault][lineId]`). Members with nothing outstanding cost one read. For the rest, the
+ * keeper keeps a per-member cache of cycles that still owe and the newest cycle it has scanned:
+ * after the first full walk-back it only scans new cycles, so cost per tick stays flat even if a
+ * debt is never collected. If the cache no longer accounts for the outstanding amount it rescans.
+ * Nothing is persisted, nothing is skipped after a restart, and one failing debtor never blocks others.
  */
+type DebtCache = { scanned: bigint; debts: Set<bigint> }
+const debtCache = new Map<string, DebtCache>()
+
+async function netOf(cid: bigint, cyc: bigint, m: Address) {
+  const [net, settled] = await Promise.all([
+    pc.readContract({ address: CIRCUIT!, abi: parCircuitAbi, functionName: "net", args: [cid, cyc, m] }),
+    pc.readContract({ address: CIRCUIT!, abi: parCircuitAbi, functionName: "settled", args: [cid, cyc, m] }),
+  ])
+  return { owes: !settled && (net as bigint) < 0n ? -(net as bigint) : 0n }
+}
+
 async function circuitJobs(now: bigint) {
   if (!CIRCUIT) return
   const n = await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "nextCircleId" })
@@ -441,30 +476,58 @@ async function circuitJobs(now: bigint) {
     const members = (await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "members_", args: [cid] })) as Address[]
     const current = await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "currentCycle", args: [cid] })
     for (const m of members) {
+      const key = `${cid}:${m}`
       try {
-        const [vault, lineId, active] = (await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "members", args: [cid, m] })) as any
-        if (!active) continue
+        const [vault, lineId] = (await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "members", args: [cid, m] })) as any
         const owed = (await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "outstanding", args: [vault, lineId] })) as bigint
-        if (owed === 0n) continue
-        let found = 0n
-        for (let cyc = current; cyc >= 0n && found < owed; cyc--) {
-          const [net, settled] = await Promise.all([
-            pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "net", args: [cid, cyc, m] }),
-            pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "settled", args: [cid, cyc, m] }),
-          ])
-          if (net >= 0n || settled) continue
-          found += -net
+        if (owed === 0n) {
+          debtCache.set(key, { scanned: current, debts: new Set() })
+          continue
+        }
+        let cache = debtCache.get(key)
+        if (cache) {
+          // only cycles newer than the last scan can have added debt
+          for (let cyc = cache.scanned + 1n; cyc <= current; cyc++) if ((await netOf(cid, cyc, m)).owes > 0n) cache.debts.add(cyc)
+          cache.scanned = current
+        }
+        // verify the cache still explains the whole outstanding amount; otherwise do a full walk-back
+        let sum = 0n
+        const live = new Map<bigint, bigint>()
+        for (const cyc of cache?.debts ?? []) {
+          const { owes } = await netOf(cid, cyc, m)
+          if (owes > 0n) {
+            live.set(cyc, owes)
+            sum += owes
+          }
+        }
+        if (!cache || sum !== owed) {
+          live.clear()
+          sum = 0n
+          for (let cyc = current; cyc >= 0n && sum < owed; cyc--) {
+            const { owes } = await netOf(cid, cyc, m)
+            if (owes > 0n) {
+              live.set(cyc, owes)
+              sum += owes
+            }
+          }
+        }
+        cache = { scanned: current, debts: new Set(live.keys()) }
+        debtCache.set(key, cache)
+
+        for (const [cyc, owes] of [...live.entries()].sort((x, y) => (x[0] < y[0] ? -1 : 1))) {
           const close = await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "cycleClose", args: [cid, cyc] })
           if (now < close + settleWindow) continue // window still open: the debtor may settle themselves
           const label = `forceSettle circle ${cid} cycle ${cyc} debtor ${m}`
-          if ((failures.get(label) ?? 0) >= MAX_RETRIES) continue // given up (alerted); don't burn gas
-          const { upper, lower } = await hintsForDraw(vault, -net)
+          const { upper, lower } = await hintsForDraw(vault, owes)
           const ok = await execute(
             label,
             { address: CIRCUIT, abi: parCircuitAbi, functionName: "forceSettle", args: [cid, cyc, m, upper, lower] } as any,
             { vault, owner: m },
           )
-          if (ok) log(`${label}: drew ${formatEther(-net)} MUSD from the member's clearing line`)
+          if (ok) {
+            cache.debts.delete(cyc)
+            log(`${label}: drew ${formatEther(owes)} MUSD from the member's clearing line`)
+          }
         }
       } catch (e) {
         log(`circle ${cid} member ${m} failed: ${(e as Error).message.split("\n")[0]}`)

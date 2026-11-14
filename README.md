@@ -86,12 +86,12 @@ docs/demo.md           2:30 demo script and judge Q&A
 
 | Contract                | Testnet (matsnet, 31611) |
 | ----------------------- | ------------------------ |
-| ParFactory              | [`0xF524D872920424004fAa40D2B037aE3e70CC3040`](https://explorer.test.mezo.org/address/0xF524D872920424004fAa40D2B037aE3e70CC3040#code) (verified) |
-| ParVault implementation | [`0x7e8447dE613c0565aB049cbD76583CABaaA29797`](https://explorer.test.mezo.org/address/0x7e8447dE613c0565aB049cbD76583CABaaA29797#code) (verified) |
-| ParCircuit              | [`0x02cE73fDb14c8669E8b1A2F422148f8ee7fc5982`](https://explorer.test.mezo.org/address/0x02cE73fDb14c8669E8b1A2F422148f8ee7fc5982#code) (verified) |
+| ParFactory              | [`0xd550c5ed5eB5Bef621D07D2Ec75f9C0780a0b270`](https://explorer.test.mezo.org/address/0xd550c5ed5eB5Bef621D07D2Ec75f9C0780a0b270#code) (verified) |
+| ParVault implementation | [`0x9cEE4c639B4466dFB72117BBdb335b05359597f7`](https://explorer.test.mezo.org/address/0x9cEE4c639B4466dFB72117BBdb335b05359597f7#code) (verified) |
+| ParCircuit              | [`0xE0035DeD7dE078840BF63D3820A7ae9315654c79`](https://explorer.test.mezo.org/address/0xE0035DeD7dE078840BF63D3820A7ae9315654c79#code) (verified) |
 
-Deployed at block 16,782,238 (see `contracts/deployments/matsnet.json`). This is the post-audit deployment; the
-first deployment (`0x3837…0297` / `0xF148…0Ec2`) is superseded and should not be used.
+Deployed at block 16,782,612 (see `contracts/deployments/matsnet.json`). This is the post-audit deployment; earlier
+deployments (`0x3837…0297`, `0xF524…3040`) are superseded and should not be used.
 
 Par integrates with the official MUSD deployment (`@mezo-org/musd-contracts@1.1.0`):
 BorrowerOperations `0xCdF7028ceAB81fA0C6971208e83fa7872994beE5`, TroveManager
@@ -121,14 +121,14 @@ indexes and verifies it (Mezo's explorer doesn't index contracts created inside 
 ## Tests
 
 ```bash
-cd contracts && npm install && npm test        # 41 passing (mock MUSD system)
+cd contracts && npm install && npm test        # 44 passing (mock MUSD system)
 ./scripts/run-musd-integration.sh              # Par.test.ts against the REAL MUSD contracts (see below)
 ```
 
 - `test/Par.test.ts` (15): the core flows — waterfall, stress-test gate, irrevocability, claims and disputes,
   Recovery Mode top-up, Circuit netting (2,900 → 100 MUSD, 9,655 bps) and force-settle, close/release,
   interest accrual, stale invoices, access control, clone locking.
-- `test/Audit.test.ts` (26): one regression per audit finding, each written as the original proof of concept
+- `test/Audit.test.ts` (29): one regression per audit finding, each written as the original proof of concept
   inverted, plus a **400-step seeded random sequence** asserting the reserve invariant
   `reserved == Σ(cap − paidOut)` over active commitments after every step; multi-circle and keeper-lag cases;
   cycle finalisation and pro-rata claims; Normal-Mode CCR top-up; liquidation + `claimCollateral`; arbiter
