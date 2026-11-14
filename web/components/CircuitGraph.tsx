@@ -52,10 +52,10 @@ export function CircuitGraph({
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full">
       <defs>
-        <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+        <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" orient="auto-start-reverse">
           <path d="M 0 0 L 10 5 L 0 10 z" fill="#a3aab8" />
         </marker>
-        <marker id="arr-btc" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+        <marker id="arr-btc" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" orient="auto-start-reverse">
           <path d="M 0 0 L 10 5 L 0 10 z" fill="#F7931A" />
         </marker>
       </defs>

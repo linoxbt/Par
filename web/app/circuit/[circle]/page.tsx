@@ -165,6 +165,11 @@ export default function CircleBoard({ params }: { params: { circle: string } }) 
                 <span className="num text-3xl text-warn">{fmtDuration(windowEnd - now)}</span>
                 <span className="text-xs text-ink-400">After that, anyone can force-settle a debtor from their vault.</span>
               </>
+            ) : s.collected >= s.totalOwed ? (
+              <>
+                <span className="text-ink-400">Cycle settled</span>
+                <span className="text-lg text-ok">Every net debtor has paid. Net creditors can claim.</span>
+              </>
             ) : (
               <>
                 <span className="text-ink-400">Settle window over</span>
