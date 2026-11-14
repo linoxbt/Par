@@ -3,19 +3,24 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { ConnectButton } from "@rainbow-me/rainbowkit"
-import { NETWORK } from "@/lib/config"
 import { useMarket } from "@/lib/hooks"
 import { fmtRatio, fmtUsd, toNum } from "@/lib/format"
 
-export function Logo() {
+/** Par mark: a coin split into two equal halves ("at par"): locked BTC above, the payment it backs below. */
+export function Mark({ size = 24, inverted = false }: { size?: number; inverted?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-2">
-      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden>
-        <rect width="22" height="22" rx="6" fill="#0A0A0B" />
-        <path d="M7 16V6h4.4a2.9 2.9 0 0 1 0 5.8H7" fill="none" stroke="#fff" strokeWidth="1.7" />
-        <circle cx="15.5" cy="15.5" r="1.6" fill="#F7931A" />
-      </svg>
-      <span className="text-[17px] font-semibold tracking-tight">Par</span>
+    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>
+      <path d="M3 15a13 13 0 0 1 26 0z" fill={inverted ? "#FFFFFF" : "#0A0A0B"} />
+      <path d="M3 17h26a13 13 0 0 1-26 0z" fill="#F7931A" />
+    </svg>
+  )
+}
+
+export function Logo({ inverted = false }: { inverted?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-2" aria-label="Par">
+      <Mark size={24} inverted={inverted} />
+      <span className={`text-[21px] font-semibold leading-none tracking-[-0.05em] ${inverted ? "text-white" : "text-fg"}`}>par</span>
     </span>
   )
 }
@@ -48,9 +53,8 @@ export function Header() {
     <header className="sticky top-0 z-30 border-b border-line bg-canvas/85 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5">
         <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-2">
+          <Link href="/" className="flex items-center">
             <Logo />
-            {NETWORK !== "mainnet" && <span className="rounded-md bg-soft px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted">{NETWORK}</span>}
           </Link>
           <nav className="hidden gap-1 text-sm sm:flex">
             {nav.map((n) => (

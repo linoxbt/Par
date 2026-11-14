@@ -8,6 +8,7 @@ import { CIRCUIT, addrUrl } from "@/lib/config"
 import { fmtBtc, fmtDate, fmtDuration, fmtMusd, fmtPct, fmtUsd, short, toNum } from "@/lib/format"
 import { KIND_LABEL, useChainNow, useCommitment, useLogs, useMarket, useMe, useTx, useVault } from "@/lib/hooks"
 import { maxDrop } from "@/lib/risk"
+import { Mark } from "@/components/Header"
 import { Addr, Badge, Button, Card, CardTitle, Field, Meter, TxLink, TxStatus, inputCls } from "@/components/ui"
 
 const Z = "0x0000000000000000000000000000000000000000" as Address
@@ -47,7 +48,7 @@ export default function Certificate({ params }: { params: { vault: string; id: s
       <article className="overflow-hidden rounded-2xl border border-line bg-white shadow-float">
         <div className="flex items-center justify-between border-b border-line px-6 py-3">
           <span className="flex items-center gap-2 text-xs font-medium">
-            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-fg text-[10px] text-white">P</span>
+            <Mark size={18} />
             Par certificate
           </span>
           <span className="num text-xs text-subtle">
