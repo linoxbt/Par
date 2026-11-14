@@ -6,12 +6,17 @@
 //   4. Health watch         -> alert the owner when health(0).ok == false
 //   5. Recovery Mode        -> decode RecoveryModeNeedsReserve(b), alert with b, retry next tick
 //
+//   6. Expired commitments  -> vault.closeCommitment(id) to free reserved capacity (AUTO_CLOSE_EXPIRED)
+//
 // Every call is simulated first, so a job that is not due (or already done by someone else)
 // costs nothing. Uses chain time (latest block timestamp), not wall-clock time.
+// Alerts are deduplicated (sent on state change, then at most once per ALERT_COOLDOWN_MS) and go
+// to the log plus, when configured, Telegram and/or a JSON webhook.
 import {
   BaseError,
   ContractFunctionRevertedError,
   createPublicClient,
+  decodeErrorResult,
   createWalletClient,
   defineChain,
   formatEther,
@@ -70,11 +75,24 @@ const hintCfg = {
 
 const FACTORY = env("FACTORY") as Address
 const CIRCUIT = opt("CIRCUIT")
-const INTERVAL_MS = Number(process.env.INTERVAL_MS ?? 15_000)
+const num = (k: string, d: number, min = 0) => {
+  const v = Number(process.env[k])
+  return Number.isFinite(v) && v >= min ? v : d
+}
+const INTERVAL_MS = num("INTERVAL_MS", 15_000, 1_000)
 const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID
+const ALERT_COOLDOWN_MS = num("ALERT_COOLDOWN_MS", 30 * 60_000)
+const LOW_BALANCE_BTC = num("LOW_BALANCE_BTC", 0.005)
+const HEARTBEAT_MS = num("HEARTBEAT_MS", 5 * 60_000, 10_000)
+const TICK_TIMEOUT_MS = num("TICK_TIMEOUT_MS", 10 * 60_000, 30_000)
+const CIRCUIT_LOOKBACK = BigInt(num("CIRCUIT_LOOKBACK_CYCLES", 3, 1))
+const MAX_RETRIES = num("MAX_RETRIES", 40, 1)
+const AUTO_CLOSE_EXPIRED = (process.env.AUTO_CLOSE_EXPIRED ?? "true") !== "false"
 const ONCE = process.argv.includes("--once")
 
-const transport = http(process.env.RPC_URL ?? chain.rpcUrls.default.http[0])
+const transport = http(process.env.RPC_URL ?? chain.rpcUrls.default.http[0], { timeout: 20_000, retryCount: 3 })
 const pc = createPublicClient({ chain, transport })
 const account = privateKeyToAccount(env("KEEPER_KEY") as `0x${string}`)
 const wc = createWalletClient({ chain, transport, account })
@@ -92,6 +110,17 @@ const tmAbi = parseAbi([
 const hhAbi = parseAbi(["function getApproxHint(uint256,uint256,uint256) view returns (address,uint256,uint256)"])
 const stAbi = parseAbi(["function findInsertPosition(uint256,address,address) view returns (address,address)"])
 
+let borrowerOps: Address | undefined
+const boAbi = parseAbi(["function getBorrowingFee(uint256) view returns (uint256)"])
+async function borrowingFee(amount: bigint): Promise<bigint> {
+  try {
+    borrowerOps ??= (await pc.readContract({ address: FACTORY, abi: parFactoryAbi, functionName: "borrowerOps" })) as Address
+    return await pc.readContract({ address: borrowerOps, abi: boAbi, functionName: "getBorrowingFee", args: [amount] })
+  } catch {
+    return amount / 1000n // MUSD's 0.1% fee; hints are only a starting point
+  }
+}
+
 /** Hints for a draw of `amount` from `vault`'s trove. Falls back to zero hints on any failure. */
 async function hintsForDraw(vault: Address, amount: bigint): Promise<{ upper: Address; lower: Address }> {
   if (!hintCfg.tm || !hintCfg.hh || !hintCfg.st) return { upper: ZERO, lower: ZERO }
@@ -102,7 +131,7 @@ async function hintsForDraw(vault: Address, amount: bigint): Promise<{ upper: Ad
       functionName: "getEntireDebtAndColl",
       args: [vault],
     })
-    const fee = amount / 1000n // 0.1% borrowing fee (slightly off is fine; hints are only a starting point)
+    const fee = await borrowingFee(amount)
     const nicr = ((coll + pendingColl) * 10n ** 20n) / (principal + pendingPrincipal + amount + fee)
     const n = await pc.readContract({ address: hintCfg.tm, abi: tmAbi, functionName: "getTroveOwnersCount" })
     const trials = BigInt(Math.max(1, Math.ceil(15 * Math.sqrt(Number(n)))))
@@ -128,55 +157,122 @@ async function hintsForDraw(vault: Address, amount: bigint): Promise<{ upper: Ad
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a)
 
-async function alert(kind: string, data: Record<string, unknown>) {
-  log(`ALERT ${kind}`, JSON.stringify(data, (_, v) => (typeof v === "bigint" ? v.toString() : v)))
-  if (!ALERT_WEBHOOK_URL) return
-  try {
-    await fetch(ALERT_WEBHOOK_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind, ...data }, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
-    })
-  } catch (e) {
-    log("alert webhook failed", (e as Error).message)
-  }
+const json = (x: unknown) => JSON.stringify(x, (_, v) => (typeof v === "bigint" ? v.toString() : v))
+
+// key -> last time sent; a key is a condition (e.g. "under-reserved:<vault>")
+const alertSent = new Map<string, number>()
+
+/**
+ * Raise (or keep raising) an alert for a condition. Sent when it first appears, then at most once
+ * per ALERT_COOLDOWN_MS while it persists. `clear(key)` marks it resolved so the next occurrence
+ * alerts immediately.
+ */
+async function alert(key: string, kind: string, data: Record<string, unknown>) {
+  const last = alertSent.get(key)
+  if (last !== undefined && Date.now() - last < ALERT_COOLDOWN_MS) return
+  alertSent.set(key, Date.now())
+  log(`ALERT ${kind}`, json(data))
+  const text = `Par keeper · ${kind}\n` + Object.entries(data).map(([k, v]) => `${k}: ${typeof v === "bigint" ? v.toString() : String(v)}`).join("\n")
+  const sends: Promise<unknown>[] = []
+  if (ALERT_WEBHOOK_URL)
+    sends.push(
+      fetch(ALERT_WEBHOOK_URL, { method: "POST", headers: { "content-type": "application/json" }, body: json({ kind, ...data, text }), signal: AbortSignal.timeout(8_000) }),
+    )
+  if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID)
+    sends.push(
+      fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: json({ chat_id: TELEGRAM_CHAT_ID, text, disable_web_page_preview: true }),
+        signal: AbortSignal.timeout(8_000),
+      }),
+    )
+  for (const r of await Promise.allSettled(sends)) if (r.status === "rejected") log("alert delivery failed", (r.reason as Error)?.message)
+}
+function clear(key: string, kind?: string, data?: Record<string, unknown>) {
+  if (alertSent.delete(key) && kind) log(`RESOLVED ${kind}`, json(data ?? {}))
 }
 
-/** Decodes a revert into { name, args } when it is a custom error from our ABIs. */
+// All Par ABIs: errors bubbling up from a vault through ParCircuit.forceSettle must decode too.
+const allAbis = [...parVaultAbi, ...parCircuitAbi, ...parFactoryAbi] as const
+
+/** Decodes a revert into { name, args } when it is a custom error from any Par ABI. */
 function decodeRevert(e: unknown): { name: string; args: readonly unknown[] } | undefined {
   if (e instanceof BaseError) {
     const r = e.walk((x) => x instanceof ContractFunctionRevertedError)
-    if (r instanceof ContractFunctionRevertedError && r.data?.errorName) {
-      return { name: r.data.errorName, args: r.data.args ?? [] }
+    if (r instanceof ContractFunctionRevertedError) {
+      if (r.data?.errorName) return { name: r.data.errorName, args: r.data.args ?? [] }
+      // Raw data from a nested call: try every Par ABI.
+      const raw = (r as any).raw as `0x${string}` | undefined
+      if (raw && raw.length >= 10) {
+        try {
+          const d = decodeErrorResult({ abi: allAbis as any, data: raw })
+          return { name: d.errorName, args: (d.args ?? []) as readonly unknown[] }
+        } catch {
+          /* unknown error */
+        }
+      }
     }
   }
   return undefined
 }
 
+// label -> tx hash still waiting to be mined (prevents re-sending after a receipt timeout)
+const pending = new Map<string, `0x${string}`>()
+// label -> consecutive failures
+const failures = new Map<string, number>()
+
+type Ctx = { vault: Address; owner?: Address }
+
 /** Simulate, then send and wait. Returns true when a tx was mined successfully. */
-async function execute(label: string, req: Parameters<typeof pc.simulateContract>[0]): Promise<boolean> {
+async function execute(label: string, req: Parameters<typeof pc.simulateContract>[0], ctx: Ctx): Promise<boolean> {
+  const prev = pending.get(label)
+  if (prev) {
+    const rc = await pc.getTransactionReceipt({ hash: prev }).catch(() => undefined)
+    if (!rc) return false // still in flight: don't double-submit
+    pending.delete(label)
+    if (rc.status === "success") return true
+  }
   try {
     const { request } = await pc.simulateContract({ ...req, account } as any)
     const hash = await wc.writeContract(request as any)
-    const rc = await pc.waitForTransactionReceipt({ hash })
+    pending.set(label, hash)
+    const rc = await pc.waitForTransactionReceipt({ hash, timeout: 120_000 })
+    pending.delete(label)
     const url = chain.blockExplorers?.default.url
     log(`${label} -> ${rc.status} ${url ? `${url}/tx/${hash}` : hash}`)
+    if (rc.status === "success") failures.delete(label)
     return rc.status === "success"
   } catch (e) {
+    if ((e as Error)?.name === "WaitForTransactionReceiptTimeoutError") {
+      log(`${label} still pending; will check its receipt next tick`)
+      return false
+    }
+    pending.delete(label)
+    const n = (failures.get(label) ?? 0) + 1
+    failures.set(label, n)
     const err = decodeRevert(e)
     if (err?.name === "RecoveryModeNeedsReserve") {
-      await alert("recovery-mode-needs-reserve", {
+      const owner = ctx.owner ?? (await ownerOf(ctx.vault))
+      await alert(`recovery:${ctx.vault}`, "recovery-mode-needs-reserve", {
         job: label,
-        vault: req.address,
+        vault: ctx.vault,
+        owner,
         btcNeeded: formatEther(err.args[0] as bigint),
+        action: "Send the BTC to the vault as idle reserve; the keeper retries automatically.",
       })
     } else if (err) {
-      log(`${label} skipped: ${err.name}`)
+      log(`${label} skipped: ${err.name}${err.args.length ? ` (${err.args.map(String).join(", ")})` : ""}`)
     } else {
       log(`${label} failed: ${(e as Error).message.split("\n")[0]}`)
     }
+    if (n === MAX_RETRIES) await alert(`stuck:${label}`, "job-keeps-failing", { job: label, attempts: n, lastError: err?.name ?? (e as Error).message.split("\n")[0] })
     return false
   }
+}
+
+async function ownerOf(vault: Address): Promise<Address | undefined> {
+  return pc.readContract({ address: vault, abi: parVaultAbi, functionName: "owner" }).catch(() => undefined) as Promise<Address | undefined>
 }
 
 // ------------------------------------------------------------------ discovery
@@ -223,15 +319,16 @@ type Commitment = {
 
 // ------------------------------------------------------------------ jobs
 
-// Commitments already known closed never need re-reading.
+// Commitments already known closed never need re-reading; installments known settled likewise.
 const closed = new Set<string>()
+const settledIdx = new Set<string>()
+// vaults whose trove is inactive (liquidated/redeemed/closed): alerted once
+const deadTrove = new Set<string>()
 
 async function vaultJobs(vault: Address, now: bigint) {
   const nextId = await pc.readContract({ address: vault, abi: parVaultAbi, functionName: "nextId" })
   const ids = Array.from({ length: Number(nextId) }, (_, i) => BigInt(i)).filter((id) => !closed.has(`${vault}:${id}`))
-  const cs = await readMany<Commitment>(
-    ids.map((id) => ({ address: vault, abi: parVaultAbi, functionName: "getCommitment", args: [id] })),
-  )
+  const cs = await readMany<Commitment>(ids.map((id) => ({ address: vault, abi: parVaultAbi, functionName: "getCommitment", args: [id] })))
 
   let anyActive = false
   for (let k = 0; k < ids.length; k++) {
@@ -243,116 +340,127 @@ async function vaultJobs(vault: Address, now: bigint) {
     }
     anyActive = true
 
+    if (now > c.expiry) {
+      // Past expiry nothing can pay. Free the reserved capacity (permissionless) unless a claim is open.
+      if (AUTO_CLOSE_EXPIRED) {
+        const open = c.kind === Kind.Claim ? (await pendingClaim(vault, id)).open : false
+        if (!open) await execute(`closeCommitment ${vault}#${id}`, { address: vault, abi: parVaultAbi, functionName: "closeCommitment", args: [id] } as any, { vault })
+      }
+      continue
+    }
+
     if (c.kind === Kind.Scheduled) {
-      if (now > c.expiry) continue
       let paidOut = c.paidOut
       for (let i = 0; i < c.count; i++) {
         if (paidOut >= c.cap) break // cover exhausted: the commitment closed itself
+        const key = `${vault}:${id}:${i}`
+        if (settledIdx.has(key)) continue
         const due = c.start + BigInt(i) * BigInt(c.period)
         if (now <= due + BigInt(c.grace)) break // later indices are not due either
-        const settled = await pc.readContract({
-          address: vault,
-          abi: parVaultAbi,
-          functionName: "installmentSettled",
-          args: [id, BigInt(i)],
-        })
-        if (settled) continue
+        if (c.expiry - now < 15n) break // too close to expiry: a tx would likely land after it
+        const settled = await pc.readContract({ address: vault, abi: parVaultAbi, functionName: "installmentSettled", args: [id, BigInt(i)] })
+        if (settled) {
+          settledIdx.add(key)
+          continue
+        }
         const { upper, lower } = await hintsForDraw(vault, c.installment)
-        const ok = await execute(`triggerMissed ${vault}#${id}[${i}]`, {
-          address: vault,
-          abi: parVaultAbi,
-          functionName: "triggerMissed",
-          args: [id, BigInt(i), upper, lower],
-        } as any)
-        if (ok) paidOut += c.installment < c.cap - paidOut ? c.installment : c.cap - paidOut
+        const ok = await execute(
+          `triggerMissed ${vault}#${id}[${i}]`,
+          { address: vault, abi: parVaultAbi, functionName: "triggerMissed", args: [id, BigInt(i), upper, lower] } as any,
+          { vault },
+        )
+        if (ok) {
+          settledIdx.add(key)
+          paidOut += c.installment < c.cap - paidOut ? c.installment : c.cap - paidOut
+        }
       }
     }
 
     if (c.kind === Kind.Claim) {
-      const [amount, filedAt, disputed, open] = await pc.readContract({
-        address: vault,
-        abi: parVaultAbi,
-        functionName: "pendingClaims",
-        args: [id],
-      })
-      if (open && !disputed && now > filedAt + BigInt(c.challengeWindow)) {
-        const { upper, lower } = await hintsForDraw(vault, amount)
-        await execute(`executeClaim ${vault}#${id}`, {
-          address: vault,
-          abi: parVaultAbi,
-          functionName: "executeClaim",
-          args: [id, upper, lower],
-        } as any)
+      const p = await pendingClaim(vault, id)
+      if (p.open && !p.disputed && now > p.filedAt + BigInt(c.challengeWindow)) {
+        const { upper, lower } = await hintsForDraw(vault, p.amount)
+        await execute(`executeClaim ${vault}#${id}`, { address: vault, abi: parVaultAbi, functionName: "executeClaim", args: [id, upper, lower] } as any, { vault })
       }
     }
   }
 
-  // Health watch: only meaningful while something is reserved.
+  // Health watch: only meaningful while something is reserved. Alert on change, not every tick.
   if (anyActive) {
     try {
-      const [ok, stressedIcr] = await pc.readContract({
-        address: vault,
-        abi: parVaultAbi,
-        functionName: "health",
-        args: [0n],
-      })
-      if (!ok) {
-        const owner = await pc.readContract({ address: vault, abi: parVaultAbi, functionName: "owner" })
-        await alert("under-reserved", { vault, owner, stressedIcr: formatEther(stressedIcr) })
-      }
+      const [ok, stressedIcr] = await pc.readContract({ address: vault, abi: parVaultAbi, functionName: "health", args: [0n] })
+      const [coll] = await pc.readContract({ address: vault, abi: parVaultAbi, functionName: "troveState" })
+      if (coll === 0n) {
+        if (!deadTrove.has(vault)) {
+          deadTrove.add(vault)
+          await alert(`trove-inactive:${vault}`, "trove-inactive", { vault, owner: await ownerOf(vault), note: "Trove is closed or liquidated while commitments are active." })
+        }
+      } else if (!ok) {
+        await alert(`under-reserved:${vault}`, "under-reserved", {
+          vault,
+          owner: await ownerOf(vault),
+          stressedIcr: formatEther(stressedIcr),
+          action: "Top up collateral or release commitments.",
+        })
+      } else clear(`under-reserved:${vault}`, "under-reserved", { vault })
     } catch (e) {
       log(`health(${vault}) failed: ${(e as Error).message.split("\n")[0]}`)
     }
   }
 }
 
-// circleId -> first cycle that may still have unsettled debtors
+async function pendingClaim(vault: Address, id: bigint) {
+  const r = (await pc.readContract({ address: vault, abi: parVaultAbi, functionName: "pendingClaims", args: [id] })) as any
+  return { amount: r[0] as bigint, filedAt: r[1] as bigint, disputed: r[2] as boolean, open: r[3] as boolean }
+}
+
+// circleId -> next cycle to inspect; cycles with failed debtors are retried separately so one bad
+// debtor never blocks later cycles. On restart scanning starts CIRCUIT_LOOKBACK cycles back
+// (older cycles cannot be force-settled any more once finalised), not from genesis.
 const circleCursor = new Map<bigint, bigint>()
+const retryCycles = new Map<bigint, Set<bigint>>()
+
+async function settleCycle(cid: bigint, cyc: bigint, members: readonly Address[]): Promise<boolean> {
+  let allDone = true
+  for (const m of members) {
+    const [net, settled] = await Promise.all([
+      pc.readContract({ address: CIRCUIT!, abi: parCircuitAbi, functionName: "net", args: [cid, cyc, m] }),
+      pc.readContract({ address: CIRCUIT!, abi: parCircuitAbi, functionName: "settled", args: [cid, cyc, m] }),
+    ])
+    if (net >= 0n || settled) continue
+    const [vault] = (await pc.readContract({ address: CIRCUIT!, abi: parCircuitAbi, functionName: "members", args: [cid, m] })) as any
+    const label = `forceSettle circle ${cid} cycle ${cyc} debtor ${m}`
+    if ((failures.get(label) ?? 0) >= MAX_RETRIES) continue // given up (alerted); don't burn gas
+    const { upper, lower } = await hintsForDraw(vault, -net)
+    const ok = await execute(
+      label,
+      { address: CIRCUIT!, abi: parCircuitAbi, functionName: "forceSettle", args: [cid, cyc, m, upper, lower] } as any,
+      { vault, owner: m },
+    )
+    if (ok) log(`${label} settled ${formatEther(-net)} MUSD`)
+    else allDone = false
+  }
+  return allDone
+}
 
 async function circuitJobs(now: bigint) {
   if (!CIRCUIT) return
   const n = await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "nextCircleId" })
   for (let cid = 0n; cid < n; cid++) {
-    const [, , , settleWindow] = await pc.readContract({
-      address: CIRCUIT,
-      abi: parCircuitAbi,
-      functionName: "circles",
-      args: [cid],
-    })
-    const members = await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "members_", args: [cid] })
+    const circle = (await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "circles", args: [cid] })) as any
+    const settleWindow = circle[3] as bigint
+    const members = (await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "members_", args: [cid] })) as Address[]
     const current = await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "currentCycle", args: [cid] })
-    let cyc = circleCursor.get(cid) ?? 0n
+    const retry = retryCycles.get(cid) ?? new Set<bigint>()
+    retryCycles.set(cid, retry)
+
+    for (const cyc of [...retry]) if (await settleCycle(cid, cyc, members)) retry.delete(cyc)
+
+    let cyc = circleCursor.get(cid) ?? (current > CIRCUIT_LOOKBACK ? current - CIRCUIT_LOOKBACK : 0n)
     for (; cyc < current; cyc++) {
-      const close = await pc.readContract({
-        address: CIRCUIT,
-        abi: parCircuitAbi,
-        functionName: "cycleClose",
-        args: [cid, cyc],
-      })
+      const close = await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "cycleClose", args: [cid, cyc] })
       if (now < close + settleWindow) break // window still open: debtors may settle themselves
-      let allDone = true
-      for (const m of members) {
-        const [net, settled] = await Promise.all([
-          pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "net", args: [cid, cyc, m] }),
-          pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "settled", args: [cid, cyc, m] }),
-        ])
-        if (net >= 0n || settled) continue
-        const [vault] = await pc.readContract({
-          address: CIRCUIT,
-          abi: parCircuitAbi,
-          functionName: "members",
-          args: [cid, m],
-        })
-        const { upper, lower } = await hintsForDraw(vault, -net)
-        const ok = await execute(`forceSettle circle ${cid} cycle ${cyc} debtor ${m} (${formatEther(-net)} MUSD)`, {
-          address: CIRCUIT,
-          abi: parCircuitAbi,
-          functionName: "forceSettle",
-          args: [cid, cyc, m, upper, lower],
-        } as any)
-        if (!ok) allDone = false
-      }
-      if (!allDone) break // retry this cycle next tick
+      if (!(await settleCycle(cid, cyc, members))) retry.add(cyc) // retry later, keep moving
     }
     circleCursor.set(cid, cyc)
   }
@@ -361,12 +469,27 @@ async function circuitJobs(now: bigint) {
 // ------------------------------------------------------------------ loop
 
 let running = false
+let tickStarted = 0
+let ticks = 0
+let lastBalance = 0n
+
 async function tick() {
-  if (running) return
+  if (running) {
+    if (Date.now() - tickStarted > TICK_TIMEOUT_MS) {
+      log(`tick stuck for ${Math.round((Date.now() - tickStarted) / 1000)}s; exiting so the platform restarts the keeper`)
+      process.exit(1)
+    }
+    return
+  }
   running = true
+  tickStarted = Date.now()
   try {
     const block = await pc.getBlock()
     const now = block.timestamp
+    lastBalance = await pc.getBalance({ address: account.address })
+    if (Number(formatEther(lastBalance)) < LOW_BALANCE_BTC)
+      await alert("low-balance", "keeper-low-balance", { keeper: account.address, balance: formatEther(lastBalance), threshold: LOW_BALANCE_BTC })
+    else clear("low-balance", "keeper-low-balance")
     const vaults = await listVaults()
     for (const v of vaults) {
       try {
@@ -376,6 +499,7 @@ async function tick() {
       }
     }
     await circuitJobs(now)
+    ticks++
   } catch (e) {
     log(`tick failed: ${(e as Error).message.split("\n")[0]}`)
   } finally {
@@ -384,7 +508,21 @@ async function tick() {
 }
 
 log(`Par keeper on ${chain.name} (${chain.id}) as ${account.address}; factory ${FACTORY}; circuit ${CIRCUIT ?? "-"}`)
+log(`alerts: ${[TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID ? "telegram" : "", ALERT_WEBHOOK_URL ? "webhook" : ""].filter(Boolean).join("+") || "log only"}`)
 const bal = await pc.getBalance({ address: account.address })
 log(`keeper balance ${formatEther(bal)} BTC`)
 await tick()
-if (!ONCE) setInterval(tick, INTERVAL_MS)
+if (!ONCE) {
+  const loop = setInterval(tick, INTERVAL_MS)
+  const beat = setInterval(() => log(`heartbeat: ${ticks} ticks, balance ${formatEther(lastBalance)} BTC, pending ${pending.size}`), HEARTBEAT_MS)
+  const stop = async (sig: string) => {
+    log(`${sig}: stopping`)
+    clearInterval(loop)
+    clearInterval(beat)
+    const t0 = Date.now()
+    while (running && Date.now() - t0 < 20_000) await new Promise((r) => setTimeout(r, 250))
+    process.exit(0)
+  }
+  process.on("SIGTERM", () => void stop("SIGTERM"))
+  process.on("SIGINT", () => void stop("SIGINT"))
+}
