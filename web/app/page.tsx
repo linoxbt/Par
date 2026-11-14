@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useState } from "react"
 import { parseEther } from "viem"
-import { CONFIGURED } from "@/lib/config"
 import { fmtBps, fmtMusd, fmtPct, fmtUsd, toNum } from "@/lib/format"
 import { useMarket, useProtocol } from "@/lib/hooks"
 import { maxDrop, openPreview } from "@/lib/risk"
@@ -72,7 +71,6 @@ function Hero({ price, live }: { price: bigint; live: boolean }) {
               <span className="font-mono text-btc">₿</span> Built on MUSD, minted not pooled
             </span>
           </div>
-          {!CONFIGURED && <p className="mt-6 text-sm text-warn">Set NEXT_PUBLIC_FACTORY and NEXT_PUBLIC_CIRCUIT to point the app at a deployment.</p>}
         </div>
         <HeroVisual price={price} />
       </div>
