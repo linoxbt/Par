@@ -7,3 +7,4 @@ coverage
 deployments/*.local.json
 .musd
 deployments/localhost.json
+scripts/_*.ts
