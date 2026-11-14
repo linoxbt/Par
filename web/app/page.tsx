@@ -94,7 +94,7 @@ function PayoutCard() {
       <div className="rounded-2xl border border-line bg-white p-6 shadow-float">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-fg text-xs text-white">₿</span>
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-btc text-sm text-white" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>₿</span>
             Vault 0x61ef…4296
           </div>
           <span key={s.tag} className={`animate-rise rounded-full px-2.5 py-0.5 text-xs font-medium ${toneCls}`}>

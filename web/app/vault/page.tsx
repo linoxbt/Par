@@ -44,7 +44,7 @@ function VaultInner() {
       <div className="flex flex-col gap-8">
         <PageHead eyebrow="Vault" title="Your vault" sub="Lock BTC once, back many promises." />
         <Card className="flex flex-col items-center gap-4 py-14 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-fg text-lg text-white">₿</span>
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-btc text-xl text-white" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>₿</span>
           <div className="text-lg font-medium">Connect a wallet to open your vault</div>
           <p className="max-w-md text-sm text-muted">Bitcoin wallets (Xverse, Unisat, OKX) connect through Mezo Passport. EVM wallets work too.</p>
           <ConnectButton />
