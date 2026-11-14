@@ -1,0 +1,19 @@
+{
+  "name": "@par/contracts",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:matsnet": "hardhat run scripts/deploy-par.ts --network matsnet"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "5.2.0",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.22.17",
+    "typescript": "^5.6.3",
+    "ts-node": "^10.9.2"
+  }
+}
