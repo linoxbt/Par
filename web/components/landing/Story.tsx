@@ -62,41 +62,61 @@ export function Story({ price }: { price: number }) {
 
   return (
     <section ref={ref} className={pinned ? "relative h-[360vh]" : "relative"}>
-      <div className={pinned ? "sticky top-16 flex h-[calc(100vh-4rem)] items-center" : "py-20"}>
+      <div className={pinned ? "sticky top-16 flex h-[calc(100vh-4rem)] items-center" : "py-16"}>
         <div className="mx-auto w-full max-w-6xl px-5">
           <h2 className="h-section">
             One promise. <span className="text-subtle">Four moves, one vault.</span>
           </h2>
-          <div className="mt-12 grid items-center gap-12 lg:grid-cols-[1fr_1.05fr]">
+          <div className="mt-8 grid grid-cols-1 items-center gap-6 sm:mt-12 lg:grid-cols-[1fr_1.05fr] lg:gap-12">
+            {pinned ? (
             <ol className="relative">
-              <span className="absolute bottom-6 left-[5px] top-6 w-px bg-line" />
-              <span
-                className="absolute left-[5px] top-6 w-px bg-btc transition-[height] duration-300"
-                style={{ height: `calc(${pinned ? progress * 100 : ((step + 1) / 4) * 100}% - 48px)` }}
-              />
-              {STEPS.map((s, i) => (
-                <li key={s.t}>
-                  <button onClick={() => go(i)} className="relative flex w-full items-start gap-5 py-5 text-left">
-                    <span
-                      className={`relative z-10 mt-2 h-[11px] w-[11px] shrink-0 rounded-full border-2 transition ${
-                        i <= step ? "border-btc bg-btc" : "border-line-strong bg-canvas"
-                      }`}
-                    />
-                    <span>
-                      <span className={`flex items-baseline gap-2 text-xl font-medium tracking-tight transition ${i === step ? "text-fg" : "text-subtle"}`}>
-                        <span className="num text-xs">0{i + 1}</span>
-                        {s.t}
+                <span className="absolute bottom-6 left-[5px] top-6 w-px bg-line" />
+                <span
+                  className="absolute left-[5px] top-6 w-px bg-btc transition-[height] duration-300"
+                  style={{ height: `calc(${pinned ? progress * 100 : ((step + 1) / 4) * 100}% - 48px)` }}
+                />
+                {STEPS.map((s, i) => (
+                  <li key={s.t}>
+                    <button onClick={() => go(i)} className="relative flex w-full items-start gap-5 py-5 text-left">
+                      <span
+                        className={`relative z-10 mt-2 h-[11px] w-[11px] shrink-0 rounded-full border-2 transition ${
+                          i <= step ? "border-btc bg-btc" : "border-line-strong bg-canvas"
+                        }`}
+                      />
+                      <span>
+                        <span className={`flex items-baseline gap-2 text-xl font-medium tracking-tight transition ${i === step ? "text-fg" : "text-subtle"}`}>
+                          <span className="num text-xs">0{i + 1}</span>
+                          {s.t}
+                        </span>
+                        <span className={`mt-1 block text-sm transition ${i === step ? "text-muted" : "text-subtle/70"}`}>{s.d}</span>
                       </span>
-                      <span className={`mt-1 block text-sm transition ${i === step ? "text-muted" : "text-subtle/70"}`}>{s.d}</span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ol>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="min-w-0">
+                <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none]">
+                  {STEPS.map((st, i) => (
+                    <button
+                      key={st.t}
+                      onClick={() => go(i)}
+                      className={`flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm transition ${
+                        i === step ? "border-fg bg-fg text-white" : "border-line-strong bg-white text-muted"
+                      }`}
+                    >
+                      <span className="num text-[10px] opacity-70">0{i + 1}</span>
+                      {st.t}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-4 text-muted">{STEPS[step].d}</p>
+              </div>
+            )}
 
-            <div className="relative mx-auto w-full max-w-[440px]">
+            <div className="relative mx-auto w-full min-w-0 max-w-[440px]">
               <div className="rounded-[22px] border border-line bg-soft p-2">
-                <div key={step} className="min-h-[360px] animate-rise rounded-2xl border border-line bg-white p-5 shadow-card">
+                <div key={step} className="min-h-[340px] animate-rise rounded-2xl border border-line bg-white p-4 shadow-card sm:min-h-[360px] sm:p-5">
                   {step === 0 && <LockCard btc={btc} setBtc={setBtc} price={price} capacity={capacity} maxCover={maxCover} />}
                   {step === 1 && <PromiseCard fits={fits} stressed={stressed} cover={cover} />}
                   {step === 2 && <MissCard />}

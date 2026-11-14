@@ -2,12 +2,12 @@ import Link from "next/link"
 
 export function DocHero({ kicker, title, muted, sub, children }: { kicker: string; title: string; muted: string; sub: string; children?: React.ReactNode }) {
   return (
-    <section className="mx-auto max-w-6xl px-5 pb-14 pt-16">
+    <section className="mx-auto max-w-6xl px-5 pb-12 pt-10 sm:pb-14 sm:pt-16">
       <span className="tag">{kicker}</span>
-      <h1 className="h-display mt-3 max-w-3xl text-5xl sm:text-6xl">
+      <h1 className="h-display mt-3 max-w-3xl text-[40px] sm:text-6xl">
         {title} <span className="text-subtle">{muted}</span>
       </h1>
-      <p className="mt-5 max-w-xl text-[17px] text-muted">{sub}</p>
+      <p className="mt-5 max-w-xl text-base text-muted sm:text-[17px]">{sub}</p>
       {children}
     </section>
   )
@@ -15,7 +15,7 @@ export function DocHero({ kicker, title, muted, sub, children }: { kicker: strin
 
 export function DocSection({ id, n, title, children }: { id?: string; n: string; title: string; children: React.ReactNode }) {
   return (
-    <section id={id} className="mx-auto grid max-w-6xl scroll-mt-24 gap-8 border-t border-line px-5 py-14 lg:grid-cols-[240px_1fr]">
+    <section id={id} className="mx-auto grid max-w-6xl scroll-mt-24 gap-6 border-t border-line px-5 py-10 sm:gap-8 sm:py-14 lg:grid-cols-[240px_1fr]">
       <div>
         <span className="font-mono text-[11px] text-subtle">{n}</span>
         <h2 className="mt-1 text-xl font-semibold tracking-tight">{title}</h2>

@@ -188,7 +188,7 @@ export default function CircleBoard({ params }: { params: { circle: string } }) 
       <Card>
         <CardTitle>Members</CardTitle>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[620px] text-sm">
             <thead className="text-left text-xs font-medium text-muted">
               <tr>
                 <th className="py-2">Member</th>

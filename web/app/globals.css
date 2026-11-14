@@ -8,6 +8,10 @@
 :root {
   color-scheme: light;
 }
+html {
+  @apply bg-canvas;
+  -webkit-tap-highlight-color: transparent;
+}
 body {
   @apply bg-canvas font-sans text-fg antialiased;
 }

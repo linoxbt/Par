@@ -81,17 +81,44 @@ function ProductsMenu() {
 
 const MARKETING = ["/", "/developers", "/security"]
 
+const MOBILE_LINKS: [string, string][] = [
+  ["/vault", "Vault"],
+  ["/vault/new-guarantee", "Guarantees"],
+  ["/circuit", "Circuit"],
+  ["/developers", "Developers"],
+  ["/security", "Security"],
+]
+
+function Wallet() {
+  return (
+    <ConnectButton
+      label="Connect"
+      showBalance={false}
+      chainStatus={{ smallScreen: "none", largeScreen: "icon" }}
+      accountStatus={{ smallScreen: "avatar", largeScreen: "address" }}
+    />
+  )
+}
+
 export function Header() {
   const path = usePathname()
   const marketing = MARKETING.includes(path)
+  const [open, setOpen] = useState(false)
+  useEffect(() => setOpen(false), [path])
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : ""
+    return () => {
+      document.body.style.overflow = ""
+    }
+  }, [open])
   const link = (href: string, label: string) => (
     <Link href={href} className={`rounded-full px-3 py-1.5 text-sm transition ${path === href ? "text-fg" : "text-fg/70 hover:text-fg"}`}>
       {label}
     </Link>
   )
   return (
-    <header className="sticky top-0 z-40 px-4 pt-3">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 rounded-full border border-line bg-white/90 pl-5 pr-2 shadow-card backdrop-blur-md">
+    <header className="sticky top-0 z-40 px-3 pt-3 sm:px-4">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 rounded-full border border-line bg-white/90 pl-4 pr-2 shadow-card backdrop-blur-md sm:pl-5">
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center">
             <Logo />
@@ -103,10 +130,10 @@ export function Header() {
             {link("/security", "Security")}
           </nav>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {marketing ? (
             <>
-              <Link href="/vault/new-guarantee" className="hidden rounded-full px-4 py-2 text-sm text-fg/80 hover:text-fg sm:block">
+              <Link href="/vault/new-guarantee" className="hidden rounded-full px-4 py-2 text-sm text-fg/80 hover:text-fg lg:block">
                 Make a guarantee
               </Link>
               <Link href="/vault" className="rounded-full bg-fg px-4 py-2 text-sm font-medium text-white transition hover:bg-black/80">
@@ -116,11 +143,54 @@ export function Header() {
           ) : (
             <>
               <LiveStatus />
-              <ConnectButton showBalance={false} chainStatus="icon" accountStatus="address" />
+              <Wallet />
             </>
           )}
+          <button
+            onClick={() => setOpen((o) => !o)}
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-soft md:hidden"
+          >
+            <span className="relative block h-3 w-4">
+              <span className={`absolute left-0 h-[1.5px] w-4 bg-fg transition ${open ? "top-1.5 rotate-45" : "top-0"}`} />
+              <span className={`absolute left-0 top-1.5 h-[1.5px] w-4 bg-fg transition ${open ? "opacity-0" : ""}`} />
+              <span className={`absolute left-0 h-[1.5px] w-4 bg-fg transition ${open ? "top-1.5 -rotate-45" : "top-3"}`} />
+            </span>
+          </button>
         </div>
       </div>
+      {open && (
+        <div className="fixed inset-x-0 bottom-0 top-[72px] z-40 bg-canvas/95 px-3 backdrop-blur-md md:hidden">
+          <nav className="mx-auto mt-2 max-w-6xl animate-rise rounded-3xl border border-line bg-white p-2 shadow-float">
+            {MOBILE_LINKS.map(([href, label]) => (
+              <Link
+                key={href}
+                href={href}
+                className={`flex items-center justify-between rounded-2xl px-4 py-3.5 text-[17px] ${path === href ? "bg-soft font-medium" : ""}`}
+              >
+                {label}
+                <span className="text-subtle">›</span>
+              </Link>
+            ))}
+            <div className="mt-2 flex items-center justify-between gap-3 border-t border-line px-2 pb-1 pt-3">
+              <MobileStatus />
+              <Wallet />
+            </div>
+          </nav>
+        </div>
+      )}
     </header>
+  )
+}
+
+function MobileStatus() {
+  const m = useMarket()
+  return (
+    <span className="flex items-center gap-2 text-xs text-muted">
+      <span className={`h-1.5 w-1.5 rounded-full ${m.recoveryMode ? "bg-warn" : "bg-ok"}`} />
+      <span className="num">BTC {m.price ? fmtUsd(toNum(m.price)) : "…"}</span>
+      <span className="num">· TCR {fmtRatio(m.tcr)}</span>
+    </span>
   )
 }

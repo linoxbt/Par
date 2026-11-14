@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 /**
  * Interactive stress curve for an example vault: collateral ratio after every promise is called,
@@ -9,9 +9,15 @@ import { useMemo, useState } from "react"
 export function StressChart({ price, coll = 0.25, promised = 1500 }: { price: number; coll?: number; promised?: number }) {
   const debt = 1800 * 1.001 + 200
   const need = promised * 1.001
-  const W = 720
-  const H = 280
-  const pad = { l: 44, r: 16, t: 16, b: 30 }
+  const box = useRef<HTMLDivElement>(null)
+  const [W, setW] = useState(720)
+  useEffect(() => {
+    const ro = new ResizeObserver(([e]) => setW(Math.max(300, Math.round(e.contentRect.width))))
+    ro.observe(box.current!)
+    return () => ro.disconnect()
+  }, [])
+  const H = W < 500 ? 240 : 280
+  const pad = { l: 40, r: 12, t: 16, b: 30 }
   const pts = useMemo(
     () =>
       Array.from({ length: 91 }, (_, d) => {
@@ -45,6 +51,7 @@ export function StressChart({ price, coll = 0.25, promised = 1500 }: { price: nu
         if (e.key === "ArrowLeft") setHover((v) => Math.max(0, v - 1))
       }}
       className="outline-none"
+      ref={box}
     >
       <svg
         viewBox={`0 0 ${W} ${H}`}
@@ -52,6 +59,11 @@ export function StressChart({ price, coll = 0.25, promised = 1500 }: { price: nu
         onMouseMove={(e) => {
           const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect()
           const px = ((e.clientX - r.left) / r.width) * W
+          setHover(Math.max(0, Math.min(90, Math.round(((px - pad.l) / (W - pad.l - pad.r)) * 90))))
+        }}
+        onTouchMove={(e) => {
+          const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect()
+          const px = ((e.touches[0].clientX - r.left) / r.width) * W
           setHover(Math.max(0, Math.min(90, Math.round(((px - pad.l) / (W - pad.l - pad.r)) * 90))))
         }}
       >
@@ -72,7 +84,7 @@ export function StressChart({ price, coll = 0.25, promised = 1500 }: { price: nu
             </text>
           </g>
         ))}
-        {[0, 20, 40, 60, 80].map((d) => (
+        {(W < 500 ? [0, 40, 80] : [0, 20, 40, 60, 80]).map((d) => (
           <text key={d} x={x(d)} y={H - 10} textAnchor="middle" fontSize="10" fill="#9B9EA6" fontFamily="ui-monospace,monospace">
             −{d}%
           </text>
@@ -84,7 +96,7 @@ export function StressChart({ price, coll = 0.25, promised = 1500 }: { price: nu
           <g key={rf.label}>
             <line x1={pad.l} x2={W - pad.r} y1={y(rf.r)} y2={y(rf.r)} stroke={rf.c} strokeDasharray="4 4" strokeOpacity="0.7" />
             <text x={W - pad.r - 4} y={y(rf.r) - 5} textAnchor="end" fontSize="10" fill={rf.c} fontFamily="ui-monospace,monospace">
-              {rf.label}
+              {W < 500 ? rf.label.split(" ")[0] : rf.label}
             </text>
           </g>
         ))}

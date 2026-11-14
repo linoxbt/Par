@@ -134,7 +134,7 @@ export function Button({
 export function LinkButton({ href, children, variant = "primary" }: { href: string; children: React.ReactNode; variant?: "primary" | "ghost" }) {
   const style = variant === "primary" ? "bg-fg text-white hover:bg-black/80" : "border border-line-strong bg-white text-fg hover:border-fg"
   return (
-    <Link href={href} className={`inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition ${style}`}>
+    <Link href={href} className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-medium transition ${style}`}>
       {children}
     </Link>
   )

@@ -20,12 +20,14 @@ export default function Developers() {
     <div>
       <DocHero kicker="Developers" title="Three contracts." muted="One keeper. This app." sub="Everything Par does is onchain and permissionless: anyone can trigger a missed payment, execute an undisputed claim or force-settle a defaulter.">
         <div className="mt-8 grid items-start gap-10 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="flex flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-3">
             <CopyChip text="git clone https://github.com/linoxbt/par && cd par/contracts && npm i && npm test" />
             <CopyChip text="./scripts/dev-local.sh" />
             <p className="text-sm text-muted">The second command runs a local chain with a model of MUSD, deploys Par, seeds both demos, and starts the keeper and this app.</p>
           </div>
-          <CodeCard />
+          <div className="min-w-0">
+            <CodeCard />
+          </div>
         </div>
       </DocHero>
 
@@ -37,9 +39,9 @@ export default function Developers() {
             ["Deploy to Mezo testnet", "Needs a key funded from faucet.test.mezo.org. Prints the frontend env.", "MATSNET_PRIVATE_KEY=0x… npm run deploy:matsnet"],
             ["Start the keeper", "Watches every vault and circle, simulates first, alerts on Recovery Mode.", "cd keeper && FACTORY=… CIRCUIT=… KEEPER_KEY=… npm start"],
           ].map(([t, d, cmd], i) => (
-            <li key={t} className="grid gap-3 sm:grid-cols-[28px_1fr]">
+            <li key={t} className="grid min-w-0 gap-3 sm:grid-cols-[28px_1fr]">
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-fg font-mono text-xs text-white">{i + 1}</span>
-              <div>
+              <div className="min-w-0">
                 <div className="font-medium">{t}</div>
                 <p className="mt-1 text-sm text-muted">{d}</p>
                 <div className="mt-3">

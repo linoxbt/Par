@@ -7,10 +7,11 @@ import { useEffect, useRef, useState } from "react"
  * Payout arcs travel from the vault to each beneficiary; a dot field below rises and falls like collateral.
  */
 const TARGETS = [
-  { label: "LANDLORD", amount: "500", x: 0.78, y: 0.16 },
-  { label: "SUPPLIER", amount: "1,200", x: 0.94, y: 0.46 },
-  { label: "CIRCLE #1", amount: "100", x: 0.14, y: 0.3 },
+  { label: "LANDLORD", amount: "500", x: 0.78, y: 0.16, mx: 0.68, my: 0.06 },
+  { label: "SUPPLIER", amount: "1,200", x: 0.89, y: 0.46, mx: 0.78, my: 0.42 },
+  { label: "CIRCLE #1", amount: "100", x: 0.14, y: 0.3, mx: 0.22, my: 0.18 },
 ]
+const pos = (t: (typeof TARGETS)[number], narrow: boolean) => (narrow ? { x: t.mx, y: t.my } : { x: t.x, y: t.y })
 
 export function GlobeViz() {
   const wrap = useRef<HTMLDivElement>(null)
@@ -18,6 +19,9 @@ export function GlobeViz() {
   const [active, setActive] = useState(0)
   const activeRef = useRef(0)
   activeRef.current = active
+  const [narrow, setNarrow] = useState(false)
+  const narrowRef = useRef(false)
+  narrowRef.current = narrow
 
   useEffect(() => {
     const t = setInterval(() => setActive((a) => (a + 1) % TARGETS.length), 2600)
@@ -40,6 +44,7 @@ export function GlobeViz() {
       c.style.width = `${w}px`
       c.style.height = `${h}px`
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      setNarrow(w < 560)
     }
     resize()
     const ro = new ResizeObserver(resize)
@@ -61,7 +66,7 @@ export function GlobeViz() {
     const draw = (now: number) => {
       const t = reduce ? 0 : (now - t0) / 1000
       ctx.clearRect(0, 0, w, h)
-      const R = Math.min(w, h) * 0.34
+      const R = Math.min(w, h) * (w < 560 ? 0.38 : 0.34)
       const cx = w * 0.52
       const cy = h * 0.46
       const rot = t * 0.12
@@ -111,8 +116,9 @@ export function GlobeViz() {
 
       // payout arcs
       TARGETS.forEach((tg, i) => {
-        const tx = tg.x * w
-        const ty = tg.y * h + 22
+        const pp = pos(tg, narrowRef.current)
+        const tx = pp.x * w
+        const ty = pp.y * h + 22
         const mx = (vx + tx) / 2
         const my = Math.min(vy, ty) - R * 0.55
         const on = i === activeRef.current
@@ -158,15 +164,15 @@ export function GlobeViz() {
   }, [])
 
   return (
-    <div ref={wrap} className="relative h-[460px] w-full sm:h-[520px]">
+    <div ref={wrap} className="relative h-[380px] w-full sm:h-[520px]">
       <canvas ref={canvas} className="absolute inset-0" aria-hidden />
       {TARGETS.map((tg, i) => (
         <div
           key={tg.label}
-          className={`absolute -translate-x-1/2 rounded-md border px-2 py-1 font-mono text-[10px] tracking-wider transition ${
+          className={`absolute -translate-x-1/2 whitespace-nowrap rounded-md border px-2 py-1 font-mono text-[10px] tracking-wider transition ${
             i === active ? "border-fg bg-fg text-white" : "border-line bg-white text-muted"
           }`}
-          style={{ left: `${tg.x * 100}%`, top: `${tg.y * 100}%` }}
+          style={{ left: `${pos(tg, narrow).x * 100}%`, top: `${pos(tg, narrow).y * 100}%` }}
         >
           {tg.label} <span className={i === active ? "text-btc" : ""}>{tg.amount}</span>
         </div>
@@ -193,7 +199,7 @@ function PayingCard({ target }: { target: (typeof TARGETS)[number] }) {
   }, [amount])
   const done = n >= amount - 0.01
   return (
-    <div className="absolute bottom-10 left-0 w-60 rounded-xl border border-line bg-white/95 p-3.5 shadow-float backdrop-blur sm:left-2">
+    <div className="absolute bottom-4 left-0 w-52 rounded-xl border border-line bg-white/95 p-3 shadow-float backdrop-blur sm:bottom-10 sm:left-2 sm:w-60 sm:p-3.5">
       <div className="flex items-center justify-between text-[11px]">
         <span className="flex items-center gap-1.5 text-muted">
           <span className={`h-1.5 w-1.5 rounded-full ${done ? "bg-ok" : "animate-pulseDot bg-btc"}`} />

@@ -275,17 +275,17 @@ function Dashboard({ vault }: { vault: Address }) {
         </div>
       )}
 
-      <Card pad={false} className="grid divide-y divide-line sm:grid-cols-4 sm:divide-x sm:divide-y-0">
-        <div className="p-6">
+      <Card pad={false} className="grid grid-cols-2 sm:grid-cols-4 [&>div]:border-line max-sm:[&>div:nth-child(-n+2)]:border-b max-sm:[&>div:nth-child(even)]:border-l sm:[&>div+div]:border-l">
+        <div className="p-5 sm:p-6">
           <Stat label="Collateral" value={fmtBtc(v.coll)} unit="BTC" sub={m.price ? fmtUsd(toNum(v.coll) * toNum(m.price)) : undefined} />
         </div>
-        <div className="p-6">
+        <div className="p-5 sm:p-6">
           <Stat label="Promised" value={fmtMusd(v.reserved, 0)} unit="MUSD" sub={`${active} active commitment${active === 1 ? "" : "s"}`} />
         </div>
-        <div className="p-6">
+        <div className="p-5 sm:p-6">
           <Stat label="Room for more" value={fmtMusd(v.headroom, 0)} unit="MUSD" sub="under capacity" />
         </div>
-        <div className="p-6">
+        <div className="p-5 sm:p-6">
           <Stat label="Holds if BTC falls" value={`−${fmtPct(drop)}`} tone="btc" sub="ratio stays above 150%" />
         </div>
       </Card>

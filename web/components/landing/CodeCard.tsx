@@ -83,7 +83,7 @@ export function CodeCard() {
   const [copied, setCopied] = useState(false)
   const code = CODE[tab]
   return (
-    <div className="overflow-hidden rounded-2xl border border-black/80 bg-[#0B0B0D] text-white shadow-float">
+    <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-black/80 bg-[#0B0B0D] text-white shadow-float">
       <div className="flex items-center justify-between border-b border-white/10 px-3 py-2.5">
         <div className="flex rounded-full bg-white/5 p-1">
           {(Object.keys(CODE) as (keyof typeof CODE)[]).map((t) => (
@@ -126,7 +126,7 @@ export function CodeCard() {
             <span className="h-1.5 w-1.5 rounded-full bg-[#4ADE80]" /> tests passing
           </span>
         </div>
-        <pre className="font-mono text-[12px] leading-[1.6] text-white/75">{RESPONSE[tab]}</pre>
+        <pre className="overflow-x-auto font-mono text-[12px] leading-[1.6] text-white/75">{RESPONSE[tab]}</pre>
       </div>
     </div>
   )
@@ -141,9 +141,9 @@ export function CopyChip({ text }: { text: string }) {
         setC(true)
         setTimeout(() => setC(false), 1200)
       }}
-      className="group flex w-full max-w-md items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-3 text-left font-mono text-[13px] shadow-card"
+      className="group flex w-full min-w-0 max-w-md items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-3 text-left font-mono text-[12px] shadow-card sm:text-[13px]"
     >
-      <span className="truncate">
+      <span className="min-w-0 truncate">
         <span className="text-subtle">$ </span>
         {text}
       </span>

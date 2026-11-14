@@ -68,14 +68,13 @@ function Hero() {
   ]
   return (
     <section className="relative overflow-hidden">
-      <div className="mx-auto grid max-w-6xl items-center gap-6 px-5 pb-16 pt-14 lg:grid-cols-[0.95fr_1.05fr] lg:pt-20">
+      <div className="mx-auto grid max-w-6xl items-center gap-2 px-5 pb-12 pt-10 sm:gap-6 sm:pb-16 sm:pt-14 lg:grid-cols-[0.95fr_1.05fr] lg:pt-20">
         <div className="relative z-10 animate-rise">
-          <h1 className="h-display text-[52px] sm:text-[68px]">
-            Promises that
-            <br />
+          <h1 className="h-display text-[42px] sm:text-[60px] lg:text-[68px]">
+            Promises that <br className="hidden sm:block" />
             pay themselves.
           </h1>
-          <p className="mt-6 max-w-[440px] text-[17px] leading-relaxed text-muted">
+          <p className="mt-5 max-w-[440px] text-base leading-relaxed text-muted sm:mt-6 sm:text-[17px]">
             Par turns undrawn Bitcoin credit into a guarantee you can hand to anyone. Lock BTC in a vault on Mezo, back a rent guarantee or a trade-credit line,
             and the vault pays the moment a promise breaks.
           </p>
@@ -87,7 +86,7 @@ function Hero() {
               Read the contracts <Arrow />
             </Link>
           </div>
-          <div className="mt-12 grid max-w-md grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          <div className="mt-10 grid max-w-md grid-cols-1 gap-x-6 gap-y-3 text-sm min-[420px]:grid-cols-2 sm:mt-12">
             {trust.map(([i, t]) => (
               <span key={t} className="flex items-center gap-2 text-muted">
                 <span className="flex h-6 w-6 items-center justify-center rounded-md border border-line bg-white font-mono text-[10px] text-fg">{i}</span>
@@ -112,7 +111,7 @@ function Products() {
     { n: "#4", t: "Circuit", d: "Trade credit netted onchain. Only net debts settle.", href: "/circuit", ill: <CircuitIllustration /> },
   ]
   return (
-    <section className="mx-auto max-w-6xl px-5 py-28">
+    <section className="mx-auto max-w-6xl px-5 py-20 sm:py-28">
       <SectionHead title="Four promises." muted="One vault." side="Each works on its own. Together they share one trove, one stress test and one buffer." link={{ href: "/developers", label: "Compare the contracts" }} />
       <div className="mt-10 grid gap-4 sm:grid-cols-2">
         {cards.map((c) => (
@@ -137,7 +136,7 @@ function Products() {
 function Proof({ price, live, tcr, rate, recovery }: { price: number; live: boolean; tcr?: bigint; rate?: number; recovery?: boolean }) {
   return (
     <section className="border-y border-line bg-white">
-      <div className="mx-auto max-w-6xl px-5 py-28">
+      <div className="mx-auto max-w-6xl px-5 py-20 sm:py-28">
         <h2 className="h-section max-w-3xl">
           Built on MUSD <span className="text-subtle">— Bitcoin credit that is minted, not borrowed from a pool.</span>
         </h2>
@@ -181,8 +180,8 @@ function Proof({ price, live, tcr, rate, recovery }: { price: number; live: bool
 
 function Developers() {
   return (
-    <section className="mx-auto grid max-w-6xl items-center gap-14 px-5 py-28 lg:grid-cols-[0.9fr_1.1fr]">
-      <div>
+    <section className="mx-auto grid max-w-6xl items-center gap-10 px-5 py-20 sm:gap-14 sm:py-28 lg:grid-cols-[0.9fr_1.1fr]">
+      <div className="min-w-0">
         <h2 className="h-section">
           Read it <span className="text-subtle">this afternoon.</span>
         </h2>
@@ -201,7 +200,9 @@ function Developers() {
           Read the developer guide <Arrow />
         </Link>
       </div>
-      <CodeCard />
+      <div className="min-w-0">
+        <CodeCard />
+      </div>
     </section>
   )
 }
@@ -210,11 +211,11 @@ function Developers() {
 
 function Scenario() {
   return (
-    <section className="mx-auto max-w-6xl px-5 pb-28">
+    <section className="mx-auto max-w-6xl px-5 pb-20 sm:pb-28">
       <div className="grid overflow-hidden rounded-3xl border border-line bg-white shadow-card md:grid-cols-[1.25fr_1fr]">
-        <div className="p-8 sm:p-10">
+        <div className="p-6 sm:p-10">
           <span className="font-mono text-[11px] uppercase tracking-wider text-subtle">Scenario · Lagos rent</span>
-          <p className="mt-5 text-2xl font-medium leading-snug tracking-tight sm:text-[28px]">
+          <p className="mt-5 text-xl font-medium leading-snug tracking-tight sm:text-[28px]">
             “Tenants here pay a year of rent upfront. With Par, a little Bitcoin guarantees the months instead, and the landlord gets paid even if I&apos;m late.”
           </p>
           <p className="mt-6 text-sm text-muted">An illustrative tenant, not a customer quote. The numbers are the spec&apos;s worked example.</p>
@@ -222,7 +223,7 @@ function Scenario() {
             Build this guarantee <Arrow />
           </Link>
         </div>
-        <div className="grid grid-cols-2 content-center gap-8 bg-soft p-8 sm:p-10">
+        <div className="grid grid-cols-2 content-center gap-6 bg-soft p-6 sm:gap-8 sm:p-10">
           <div className="col-span-2 flex items-center gap-2 text-sm font-medium">
             <span className="h-2 w-2 rounded-full bg-btc" /> 0.1 BTC at $100,000
           </div>
@@ -253,7 +254,7 @@ function Risk() {
     { n: "#3", t: "Recovery Mode ready", d: "When MUSD restricts debt, the vault tops up from a BTC reserve.", link: ["See the waterfall", "/security#waterfall"], ill: <ShieldIllustration /> },
   ]
   return (
-    <section className="mx-auto max-w-6xl px-5 pb-28">
+    <section className="mx-auto max-w-6xl px-5 pb-20 sm:pb-28">
       <SectionHead title="Built to be" muted="boring." side="A guarantee should be the least exciting thing in a tenant's month. Unaudited and on testnet today, and we say so." link={{ href: "/security", label: "Read the security overview" }} />
       <div className="mt-10 grid gap-4 md:grid-cols-3">
         {cards.map((c) => (
@@ -285,7 +286,7 @@ const FAQ = [
 
 function Faq() {
   return (
-    <section className="mx-auto grid max-w-6xl gap-12 px-5 pb-28 lg:grid-cols-[0.8fr_1.2fr]">
+    <section className="mx-auto grid max-w-6xl gap-8 px-5 pb-20 sm:gap-12 sm:pb-28 lg:grid-cols-[0.8fr_1.2fr]">
       <div>
         <h2 className="h-section">
           Questions, <span className="text-subtle">answered.</span>
@@ -311,13 +312,13 @@ function Faq() {
 
 function Closing() {
   return (
-    <section className="relative h-[420px] overflow-hidden">
+    <section className="relative h-[360px] overflow-hidden sm:h-[420px]">
       <GlyphRain />
       <div className="relative z-10 flex h-full flex-col items-center justify-center px-5 text-center">
         <h2 className="h-display text-4xl sm:text-6xl">
           Ready when <span className="text-subtle">your promise is.</span>
         </h2>
-        <div className="mt-8 flex gap-2">
+        <div className="mt-8 flex flex-wrap justify-center gap-2">
           <Link href="/vault" className="rounded-full bg-fg px-5 py-2.5 text-sm font-medium text-white hover:bg-black/80">
             Open a vault
           </Link>
