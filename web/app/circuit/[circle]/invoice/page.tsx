@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useState } from "react"
 import { keccak256, parseEther, toHex, type Address } from "viem"
 import { useReadContract } from "wagmi"
-import { ConnectButton } from "@rainbow-me/rainbowkit"
+import { WalletButton } from "@/components/Wallet"
 import { parCircuitAbi } from "@/lib/abi"
 import { CIRCUIT } from "@/lib/config"
 import { useCircle, useInvoices, type Invoice } from "@/lib/circuit"
@@ -40,7 +40,7 @@ export default function InvoicesPage({ params }: { params: { circle: string } })
       <Empty>
         <p className="mb-4">Connect as a circle member.</p>
         <div className="flex justify-center">
-          <ConnectButton />
+          <WalletButton align="left" />
         </div>
       </Empty>
     )

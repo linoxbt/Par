@@ -190,9 +190,11 @@ story with a typed BTC amount, a stress curve from the real health math, real co
 Geist + Geist Mono, Bitcoin orange as the single accent. No template assets, images or copy are used, and the
 testimonial slot is a clearly labelled scenario rather than an invented quote.
 
-Wallets: Mezo Passport (`getConfig`, Xverse / Unisat / OKX + EVM wallets). With a BTC wallet Passport routes
-transactions through a smart account on Mezo, which becomes the vault owner. `NEXT_PUBLIC_CHAIN=local` uses
-plain RainbowKit for the Hardhat node.
+Wallets: **Reown AppKit** for EVM wallets (MetaMask, Rabby, OKX, any mobile wallet by WalletConnect QR) and
+**Mezo Passport** for Bitcoin wallets (Xverse, Unisat, OKX), which sign through a Mezo smart account that becomes the
+vault owner. Both share one wagmi config: Passport's Bitcoin connectors are added to Reown's `WagmiAdapter`, and the
+"Connect" menu offers either modal. Set `NEXT_PUBLIC_REOWN_PROJECT_ID` (from cloud.reown.com); without it, or on the
+local chain, the app falls back to RainbowKit + Passport.
 
 Indexing: no hosted indexer. Vaults come from `ParFactory.vaultsOf/allVaults`, commitments from
 `getCommitment`, invoices from `ParCircuit.invoices`, and history from `getLogs` since the factory block.

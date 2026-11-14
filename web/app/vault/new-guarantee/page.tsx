@@ -5,7 +5,7 @@ import { Suspense, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { decodeEventLog, isAddress, parseEther, type Address } from "viem"
 import { useReadContract } from "wagmi"
-import { ConnectButton } from "@rainbow-me/rainbowkit"
+import { WalletButton } from "@/components/Wallet"
 import { parVaultAbi } from "@/lib/abi"
 import { fmtDuration, fmtMusd, fmtRatio, short } from "@/lib/format"
 import { useMe, useProtocol, useTx, useVault, useVaultsOf } from "@/lib/hooks"
@@ -89,7 +89,7 @@ function Builder() {
         {Head}
         <Card className="flex flex-col items-center gap-4 py-14 text-center">
           <div className="text-lg font-medium">Connect to make a guarantee from your vault</div>
-          <ConnectButton />
+          <WalletButton align="left" />
         </Card>
       </div>
     )

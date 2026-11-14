@@ -10,7 +10,9 @@ const addr = (v: string | undefined) => (v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v
 export const FACTORY = addr(process.env.NEXT_PUBLIC_FACTORY)
 export const CIRCUIT = addr(process.env.NEXT_PUBLIC_CIRCUIT)
 export const FACTORY_BLOCK = BigInt(process.env.NEXT_PUBLIC_FACTORY_BLOCK || "0")
-export const WC_PROJECT_ID = process.env.NEXT_PUBLIC_WC_PROJECT_ID || "par-dev"
+/** Reown (WalletConnect) Cloud project ID: https://cloud.reown.com. Public, not a secret. */
+export const REOWN_PROJECT_ID = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID || process.env.NEXT_PUBLIC_WC_PROJECT_ID || ""
+export const WC_PROJECT_ID = REOWN_PROJECT_ID || "par-dev"
 export const CONFIGURED = FACTORY !== ZERO
 
 export const mezoMainnet = defineChain({

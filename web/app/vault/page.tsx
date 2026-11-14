@@ -5,7 +5,7 @@ import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { formatEther, parseEther, type Address } from "viem"
 import { useBalance, useReadContract, useSendTransaction, useWaitForTransactionReceipt } from "wagmi"
-import { ConnectButton } from "@rainbow-me/rainbowkit"
+import { WalletButton } from "@/components/Wallet"
 import { parFactoryAbi, parVaultAbi } from "@/lib/abi"
 import { CIRCUIT, CONFIGURED, FACTORY, addrUrl } from "@/lib/config"
 import { fmtBps, fmtBtc, fmtDate, fmtMusd, fmtPct, fmtRatio, fmtUsd, short, toNum } from "@/lib/format"
@@ -47,7 +47,7 @@ function VaultInner() {
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-btc text-xl text-white" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>₿</span>
           <div className="text-lg font-medium">Connect a wallet to open your vault</div>
           <p className="max-w-md text-sm text-muted">Bitcoin wallets (Xverse, Unisat, OKX) connect through Mezo Passport. EVM wallets work too.</p>
-          <ConnectButton />
+          <WalletButton align="left" />
         </Card>
         <Steps active={0} />
       </div>

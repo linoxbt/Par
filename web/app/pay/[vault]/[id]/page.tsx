@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { type Address } from "viem"
 import { useReadContract, useReadContracts } from "wagmi"
-import { ConnectButton } from "@rainbow-me/rainbowkit"
+import { WalletButton } from "@/components/Wallet"
 import { parVaultAbi } from "@/lib/abi"
 import { erc20Abi } from "@/lib/mezoAbi"
 import { fmtDate, fmtDuration, fmtMusd } from "@/lib/format"
@@ -55,7 +55,7 @@ export default function PayPage({ params }: { params: { vault: string; id: strin
       <Empty>
         <p className="mb-4">Connect the wallet that pays the installments.</p>
         <div className="flex justify-center">
-          <ConnectButton />
+          <WalletButton align="left" />
         </div>
       </Empty>
     )

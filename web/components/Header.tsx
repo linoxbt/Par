@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
-import { ConnectButton } from "@rainbow-me/rainbowkit"
+import { WalletButton } from "@/components/Wallet"
 import { useMarket } from "@/lib/hooks"
 import { fmtRatio, fmtUsd, toNum } from "@/lib/format"
 
@@ -89,15 +89,8 @@ const MOBILE_LINKS: [string, string][] = [
   ["/security", "Security"],
 ]
 
-function Wallet() {
-  return (
-    <ConnectButton
-      label="Connect"
-      showBalance={false}
-      chainStatus={{ smallScreen: "none", largeScreen: "icon" }}
-      accountStatus={{ smallScreen: "avatar", largeScreen: "address" }}
-    />
-  )
+function Wallet({ align = "right" }: { align?: "left" | "right" }) {
+  return <WalletButton size="sm" align={align} />
 }
 
 export function Header() {
