@@ -1,0 +1,15 @@
+[
+  {"id": "s01_hook", "text": "Around the world, trust is expensive. In Lagos, renters pay one, even two years of rent upfront. Merchants lock cash away as deposits. And small businesses run on I O U's that break the moment one person doesn't pay."},
+  {"id": "s02_idle", "text": "All of that is money, sitting still. Meanwhile, Bitcoin holders sit on enormous value they would rather not sell."},
+  {"id": "s03_intro", "text": "This is Par. Your Bitcoin, as a promise. Built on Mezo, and backed by M U S D."},
+  {"id": "s04_insight", "text": "When you open a M U S D trove on Mezo, your Bitcoin gives you borrowing capacity, at a fixed rate. Most of that capacity is never used. Par turns it into promises other people can rely on. And nothing is drawn until a promise is actually called."},
+  {"id": "s05_vault", "text": "It starts with a vault: a small contract that only you control. Lock your Bitcoin once. Your capacity and your rate are fixed at that moment, and the vault keeps a small M U S D buffer, ready to pay."},
+  {"id": "s06_builder", "text": "Now, make a promise. Say, three months of rent for your landlord. Before it can exist, Par runs a stress test. Bitcoin falls forty percent, every promise is called at once, and the vault must still hold one hundred and sixty percent. If it doesn't fit, it simply can't be made. This one passes, at two hundred and eighty percent."},
+  {"id": "s07_cert", "text": "Your landlord gets a live certificate. It shows the cover remaining, when it expires, and how far Bitcoin can fall before the promise is at risk. It's shareable on WhatsApp, and anyone can verify it on chain."},
+  {"id": "s08_miss", "text": "So what happens when a payment is missed? No paperwork. No one to chase. Once the grace period ends, the vault pays the landlord in M U S D: first from its buffer, then by minting from the trove. Our keeper triggers it automatically, and so can anyone."},
+  {"id": "s09_circuit", "text": "Par Circuit does the same for trade credit. Shops that sell to each other log invoices, and the contract nets them as they are accepted."},
+  {"id": "s10_clear", "text": "Watch the loop collapse. Two thousand nine hundred M U S D of invoices, and only one hundred actually has to move. When a shop doesn't pay, the keeper settles it from the credit line pledged in its vault. Nobody else is left short."},
+  {"id": "s11_tech", "text": "Under the hood, Par is built on M U S D's core contracts, not just the token. Three contracts, verified on Mezo testnet. Forty four tests, including a randomized invariant test. Recovery Mode handled. And a keeper that never sleeps."},
+  {"id": "s12_next", "text": "Next: pilots with merchants in Lagos, an underwriting market where Bitcoin holders back other people's promises, and then mainnet."},
+  {"id": "s13_outro", "text": "Par. Your Bitcoin, as a promise. Try it today on Mezo testnet."}
+]

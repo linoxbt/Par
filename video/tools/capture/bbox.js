@@ -1,0 +1,25 @@
+const { chromium, BASE, wallet } = require('./cap-lib')
+;(async () => {
+  const b = await chromium.launch(); const out = {}
+  const box = async (p, name, loc) => { const r = await loc.first().boundingBox().catch(() => null); out[name] = r && { x: (r.x + r.width / 2) / 1600, y: (r.y + r.height / 2) / 1000 } }
+  // fresh user for create/open
+  const u = await wallet(b, '0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f'); const p = await u.newPage()
+  await p.goto(BASE + '/vault', { waitUntil: 'networkidle' }); await p.waitForTimeout(5000)
+  await box(p, 'createVault', p.getByRole('button', { name: 'Create vault' }))
+  await p.getByRole('button', { name: 'Create vault' }).first().click(); await p.waitForTimeout(6000)
+  await p.locator('input[inputmode="decimal"]').first().fill('0.25'); await p.waitForTimeout(1500)
+  await box(p, 'openTrove', p.getByRole('button', { name: /Open trove/ }))
+  await box(p, 'btcInput', p.locator('input[inputmode="decimal"]'))
+  const g = await wallet(b, '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'); const q = await g.newPage()
+  await q.goto(BASE + '/vault/new-guarantee', { waitUntil: 'networkidle' }); await q.waitForTimeout(5000)
+  const ins = q.locator('main input')
+  for (const [i, n] of [[0, 'benef'], [1, 'payer'], [2, 'inst'], [3, 'count'], [4, 'cover']]) await box(q, n, ins.nth(i))
+  await box(q, 'demoBtn', q.getByRole('button', { name: 'Demo · 2 min' }))
+  await box(q, 'make', q.getByRole('button', { name: 'Make the promise' }))
+  await box(q, 'stressCard', q.getByText('Stress test'))
+  const c = await wallet(b, null); const r = await c.newPage()
+  await r.goto(BASE + '/circuit/0', { waitUntil: 'networkidle' }); await r.waitForTimeout(5000)
+  await box(r, 'clear', r.getByRole('button', { name: 'Clear cycle' }))
+  console.log(JSON.stringify(out, null, 1)); require('fs').writeFileSync('/home/user/Par/video/src/boxes.json', JSON.stringify(out, null, 1))
+  await b.close()
+})()

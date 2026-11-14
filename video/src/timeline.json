@@ -1,0 +1,147 @@
+{
+ "fps": 30,
+ "total": 188.595,
+ "frames": 5658,
+ "scenes": [
+  {
+   "id": "hook",
+   "vo": "s01_hook",
+   "start": 0.0,
+   "voStart": 1.0,
+   "voDur": 15.101,
+   "dur": 17.001,
+   "from": 0,
+   "frames": 510
+  },
+  {
+   "id": "idle",
+   "vo": "s02_idle",
+   "start": 17.001,
+   "voStart": 17.301,
+   "voDur": 6.731,
+   "dur": 7.831,
+   "from": 510,
+   "frames": 235
+  },
+  {
+   "id": "logo",
+   "vo": "s03_intro",
+   "start": 24.832,
+   "voStart": 26.432,
+   "voDur": 5.396,
+   "dur": 8.296,
+   "from": 745,
+   "frames": 249
+  },
+  {
+   "id": "insight",
+   "vo": "s04_insight",
+   "start": 33.128,
+   "voStart": 33.528,
+   "voDur": 16.448,
+   "dur": 18.048,
+   "from": 994,
+   "frames": 541
+  },
+  {
+   "id": "vault",
+   "vo": "s05_vault",
+   "start": 51.176,
+   "voStart": 51.576,
+   "voDur": 12.628,
+   "dur": 14.128,
+   "from": 1535,
+   "frames": 424
+  },
+  {
+   "id": "builder",
+   "vo": "s06_builder",
+   "start": 65.304,
+   "voStart": 65.604,
+   "voDur": 19.519,
+   "dur": 21.019,
+   "from": 1959,
+   "frames": 631
+  },
+  {
+   "id": "cert",
+   "vo": "s07_cert",
+   "start": 86.323,
+   "voStart": 86.723,
+   "voDur": 13.141,
+   "dur": 14.541,
+   "from": 2590,
+   "frames": 436
+  },
+  {
+   "id": "miss",
+   "vo": "s08_miss",
+   "start": 100.864,
+   "voStart": 101.164,
+   "voDur": 16.384,
+   "dur": 18.084,
+   "from": 3026,
+   "frames": 543
+  },
+  {
+   "id": "circuit",
+   "vo": "s09_circuit",
+   "start": 118.948,
+   "voStart": 119.348,
+   "voDur": 8.384,
+   "dur": 9.184,
+   "from": 3568,
+   "frames": 276
+  },
+  {
+   "id": "clear",
+   "vo": "s10_clear",
+   "start": 128.132,
+   "voStart": 128.432,
+   "voDur": 14.827,
+   "dur": 16.627,
+   "from": 3844,
+   "frames": 499
+  },
+  {
+   "id": "tech",
+   "vo": "s11_tech",
+   "start": 144.759,
+   "voStart": 145.159,
+   "voDur": 16.405,
+   "dur": 18.105,
+   "from": 4343,
+   "frames": 543
+  },
+  {
+   "id": "next",
+   "vo": "s12_next",
+   "start": 162.864,
+   "voStart": 163.164,
+   "voDur": 8.256,
+   "dur": 9.556,
+   "from": 4886,
+   "frames": 287
+  },
+  {
+   "id": "montage",
+   "vo": null,
+   "start": 172.42,
+   "voStart": null,
+   "voDur": null,
+   "dur": 6.0,
+   "from": 5173,
+   "frames": 180
+  },
+  {
+   "id": "outro",
+   "vo": "s13_outro",
+   "start": 178.42,
+   "voStart": 179.02,
+   "voDur": 4.075,
+   "dur": 10.175,
+   "from": 5353,
+   "frames": 305
+  }
+ ]
+}

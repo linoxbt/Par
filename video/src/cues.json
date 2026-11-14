@@ -1,0 +1,16 @@
+{
+  "hook":    { "line1": 1.1, "line2": 5.6, "line3": 10.2, "break": 13.4 },
+  "idle":    { "freeze": 0.5, "btc": 3.2 },
+  "logo":    { "join": 0.9, "word": 1.8, "tag": 3.2, "mezo": 5.2 },
+  "insight": { "bar": 1.6, "undrawn": 6.2, "promises": 10.6, "zero": 14.2 },
+  "vault":   { "create": 2.6, "trove": 4.4, "open": 7.6, "dash": 8.6, "buffer": 11.0 },
+  "builder": { "typeA": 1.4, "typeB": 3.4, "stress": 7.4, "crash": 9.6, "fits": 16.2, "make": 18.4, "done": 19.2 },
+  "cert":    { "phone": 0.3, "cover": 3.0, "drop": 6.6, "share": 9.8 },
+  "miss":    { "missed": 4.4, "click": 8.6, "paid": 9.6, "buffer": 11.4, "mint": 12.8, "keeper": 14.6 },
+  "circuit": { "inv1": 2.4, "inv2": 3.3, "inv3": 4.2 },
+  "clear":   { "click": 0.8, "collapse": 1.6, "netted": 6.2, "count": 7.0, "force": 11.0 },
+  "tech":    { "arch": 0.8, "verified": 5.2, "tests": 8.6, "keeper": 12.6 },
+  "next":    { "c1": 0.6, "c2": 2.4, "c3": 4.4 },
+  "montage": { "a": 0.0, "b": 2.0, "c": 4.0 },
+  "outro":   { "join": 0.5, "url": 2.6, "sparkle": 3.2 }
+}

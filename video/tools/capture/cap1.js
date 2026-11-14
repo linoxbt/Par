@@ -1,0 +1,21 @@
+const { chromium, BASE, wallet, shot } = require('./cap-lib')
+;(async () => {
+  const b = await chromium.launch()
+  const ctx = await wallet(b, null)
+  const p = await ctx.newPage()
+  await p.goto(BASE + '/', { waitUntil: 'networkidle' }); await shot(p, '01-landing-hero', { wait: 3000 })
+  const H = await p.evaluate(() => document.body.scrollHeight)
+  for (const [n, f] of [['02-landing-story', 0.14], ['03-landing-products', 0.3], ['04-landing-proof', 0.46], ['05-landing-dev', 0.6], ['06-landing-risk', 0.74], ['07-landing-closing', 0.9]]) {
+    await p.evaluate((y) => window.scrollTo(0, y), Math.round(H * f)); await shot(p, n, { wait: 2200 })
+  }
+  await p.goto(BASE + '/docs/learn/how-it-works', { waitUntil: 'networkidle' }); await shot(p, '40-docs')
+  await p.keyboard.press('Control+k'); await p.waitForTimeout(600); await p.keyboard.type('waterfall', { delay: 60 }); await shot(p, '41-docs-search', { wait: 1500 })
+  await p.goto(BASE + '/security', { waitUntil: 'networkidle' }); await shot(p, '42-security')
+  await p.goto(BASE + '/circuit', { waitUntil: 'networkidle' }); await shot(p, '30-circuit-list', { wait: 4000 })
+  await p.goto(BASE + '/circuit/0', { waitUntil: 'networkidle' }); await shot(p, '31-circle-before', { wait: 5000 })
+  await p.getByRole('button', { name: 'Clear cycle' }).click()
+  for (let i = 0; i < 6; i++) await shot(p, `32-circle-clear-${i}`, { wait: 700 })
+  await shot(p, '33-circle-netted', { wait: 2500 })
+  await p.evaluate(() => window.scrollTo(0, 900)); await shot(p, '34-circle-members', { wait: 1200 })
+  await b.close()
+})()
