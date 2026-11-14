@@ -21,7 +21,6 @@ interface IBorrowerOperations {
     function refinance(address _upperHint, address _lowerHint) external;
     function claimCollateral() external;
     function getBorrowingFee(uint256 _debt) external view returns (uint256);
-    function minNetDebt() external view returns (uint256);
 }
 
 interface ITroveManager {
@@ -47,18 +46,13 @@ interface ITroveManager {
 
     function getTroveStatus(address _borrower) external view returns (Status);
     function getTroveMaxBorrowingCapacity(address _borrower) external view returns (uint256);
-    function getTroveInterestRate(address _borrower) external view returns (uint16);
-    function getCurrentICR(address _borrower, uint256 _price) external view returns (uint256);
-    function getTCR(uint256 _price) external view returns (uint256);
     function checkRecoveryMode(uint256 _price) external view returns (bool);
+    /// LiquityBase views (TroveManager inherits LiquityBase): active + default pool totals.
+    function getEntireSystemColl() external view returns (uint256);
+    function getEntireSystemDebt() external view returns (uint256);
 }
 
 interface IPriceFeed {
     /// 1e18-scaled USD per BTC. View. Reverts if the oracle is stale.
     function fetchPrice() external view returns (uint256);
-}
-
-interface IInterestRateManager {
-    /// Global rate for newly opened troves, in basis points (100 = 1%).
-    function interestRate() external view returns (uint16);
 }

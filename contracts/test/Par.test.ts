@@ -41,6 +41,13 @@ describe("Par", () => {
     return vault
   }
 
+  // Consent-based membership: admin invites, member joins with the same vault + line.
+  async function addAndJoin(circleId: number, member: User, vault: any, lineId: number) {
+    const v = await vault.getAddress()
+    await circuit.connect(deployer.wallet).addMember(circleId, member.address, v, lineId)
+    await circuit.connect(member.wallet).join(circleId, v, lineId)
+  }
+
   beforeEach(async () => {
     ;({ alice, bob, carol, dennis, eric, whale, deployer, contracts } = await setupTests())
 
@@ -172,9 +179,9 @@ describe("Par", () => {
       await v.connect(u.wallet).createClearingLine(cAddr, to1e18("5000"), now + 86400 * 30)
     }
     await circuit.connect(deployer.wallet).createCircle(300, 120) // 5-min cycle, 2-min settle window
-    await circuit.connect(deployer.wallet).addMember(0, alice.address, await va.getAddress(), 0)
-    await circuit.connect(deployer.wallet).addMember(0, bob.address, await vb.getAddress(), 0)
-    await circuit.connect(deployer.wallet).addMember(0, carol.address, await vc.getAddress(), 0)
+    await addAndJoin(0, alice, va, 0)
+    await addAndJoin(0, bob, vb, 0)
+    await addAndJoin(0, carol, vc, 0)
 
     // bob owes alice 1000, carol owes bob 1000, alice owes carol 900
     await circuit.connect(alice.wallet).createInvoice(0, bob.address, to1e18("1000"), ethers.id("inv1"))
@@ -211,12 +218,16 @@ describe("Par", () => {
     await vault.connect(bob.wallet).fileClaim(0, to1e18("3000"), ethers.id("bad"))
     await expect(vault.connect(eric.wallet).disputeClaim(0)).to.be.revertedWithCustomError(vault, "NotAuthorized")
     await vault.connect(carol.wallet).disputeClaim(0) // principal disputes
-    await expect(vault.executeClaim(0, Z, Z)).to.be.revertedWithCustomError(vault, "NotActive")
+    // a disputed claim waits for the arbiter (until the resolve deadline)
+    await expect(vault.executeClaim(0, Z, Z)).to.be.revertedWithCustomError(vault, "TooEarly")
     await expect(vault.connect(bob.wallet).resolveClaim(0, true, Z, Z)).to.be.revertedWithCustomError(vault, "NotAuthorized")
     await vault.connect(dennis.wallet).resolveClaim(0, false, Z, Z)
     expect(await vault.available(0)).to.equal(to1e18("5000"))
     expect(await vault.reserved()).to.equal(to1e18("5000"))
 
+    // refiling right after a rejection is blocked for one challenge window
+    await expect(vault.connect(bob.wallet).fileClaim(0, to1e18("2000"), ethers.id("good"))).to.be.revertedWithCustomError(vault, "TooEarly")
+    await fastForwardTime(3600)
     await vault.connect(bob.wallet).fileClaim(0, to1e18("2000"), ethers.id("good"))
     await vault.connect(alice.wallet).disputeClaim(0) // owner may also dispute
     const before = await contracts.musd.balanceOf(bob.address)
@@ -267,7 +278,8 @@ describe("Par", () => {
     await vault.connect(alice.wallet).createClaim(bob.address, alice.address, dennis.address, to1e18("4000"), now + 600, 60)
     await vault.connect(bob.wallet).fileClaim(0, to1e18("1000"), ethers.id("x"))
     await fastForwardTime(601)
-    await expect(vault.connect(eric.wallet).closeCommitment(0)).to.be.revertedWithCustomError(vault, "NotAuthorized")
+    await expect(vault.connect(eric.wallet).closeCommitment(0)).to.be.revertedWithCustomError(vault, "ClaimOpen")
+    await expect(vault.connect(bob.wallet).closeCommitment(0)).to.be.revertedWithCustomError(vault, "ClaimOpen")
     await vault.executeClaim(0, Z, Z)
     await vault.connect(eric.wallet).closeCommitment(0)
     expect(await vault.reserved()).to.equal(0n)
@@ -302,8 +314,8 @@ describe("Par", () => {
     await va.connect(alice.wallet).createClearingLine(cAddr, to1e18("5000"), now + 86400 * 30)
     await vb.connect(bob.wallet).createClearingLine(cAddr, to1e18("3000"), now + 86400 * 30)
     await circuit.connect(deployer.wallet).createCircle(300, 120)
-    await circuit.connect(deployer.wallet).addMember(0, alice.address, await va.getAddress(), 0)
-    await circuit.connect(deployer.wallet).addMember(0, bob.address, await vb.getAddress(), 0)
+    await addAndJoin(0, alice, va, 0)
+    await addAndJoin(0, bob, vb, 0)
 
     // cycle 0: bob owes alice 2,000
     await circuit.connect(alice.wallet).createInvoice(0, bob.address, to1e18("2000"), ethers.id("c0"))
@@ -333,8 +345,8 @@ describe("Par", () => {
     await va.connect(alice.wallet).createClearingLine(cAddr, to1e18("5000"), now + 86400 * 30)
     await vb.connect(bob.wallet).createClearingLine(cAddr, to1e18("5000"), now + 86400 * 30)
     await circuit.connect(deployer.wallet).createCircle(300, 120)
-    await circuit.connect(deployer.wallet).addMember(0, alice.address, await va.getAddress(), 0)
-    await circuit.connect(deployer.wallet).addMember(0, bob.address, await vb.getAddress(), 0)
+    await addAndJoin(0, alice, va, 0)
+    await addAndJoin(0, bob, vb, 0)
 
     await circuit.connect(alice.wallet).createInvoice(0, bob.address, to1e18("100"), ethers.id("a"))
     await circuit.connect(alice.wallet).createInvoice(0, bob.address, to1e18("100"), ethers.id("b"))
@@ -349,7 +361,12 @@ describe("Par", () => {
     const now = await getLatestBlockTimestamp()
     const cAddr = await circuit.getAddress()
     await va.connect(alice.wallet).createClearingLine(cAddr, to1e18("5000"), now + 86400)
-    await va.connect(alice.wallet).createClearingLine(eric.address, to1e18("1000"), now + 86400)
+    // a line must point at a contract; a line to some other contract is not this circuit's
+    await expect(va.connect(alice.wallet).createClearingLine(eric.address, to1e18("1000"), now + 86400)).to.be.revertedWithCustomError(
+      va,
+      "BadParams",
+    )
+    await va.connect(alice.wallet).createClearingLine(await factory.getAddress(), to1e18("1000"), now + 86400)
     await expect(va.connect(alice.wallet).drawLine(0, to1e18("1"), Z, Z)).to.be.revertedWithCustomError(va, "NotAuthorized")
     await circuit.connect(deployer.wallet).createCircle(300, 120)
     await expect(

@@ -56,7 +56,12 @@ interface IPriceSource {
 ///           - 200 MUSD gas compensation added at open, 0.1% borrowing fee, 1,800 MUSD min net debt
 ///           - simple per-second interest on principal at the trove's rate (fixed at open)
 ///           - the trove belongs to msg.sender; withdrawMUSD mints to the borrower
-///         It does not model liquidations, redemptions, the stability pool or sorted-list hints.
+///           - liquidation (TroveManager.liquidate): allowed when ICR < MCR, or in Recovery Mode
+///             when ICR < TCR. Below MCR all collateral is seized; between MCR and TCR (Recovery
+///             Mode) the seized collateral is capped at debt * MCR / price and the rest is a
+///             surplus the borrower pulls with BorrowerOperations.claimCollateral()
+///         It does not model redemptions, the stability pool or sorted-list hints (the debt of a
+///         liquidated trove simply leaves the system).
 ///         Integration against the real contracts is done by scripts/run-musd-integration.sh.
 contract MockMUSDSystem {
     struct Trove {
@@ -84,6 +89,7 @@ contract MockMUSDSystem {
     address public immutable owner = msg.sender;
 
     mapping(address => Trove) public troves;
+    mapping(address => uint256) public collSurplus; // CollSurplusPool balances
     address[] public troveOwners;
     mapping(address => bool) private known;
 
@@ -189,7 +195,12 @@ contract MockMUSDSystem {
         require((t.coll * price) / (t.principal + t.interest) >= MCR, "BorrowerOps: ICR < MCR");
     }
 
-    function claimCollateral() external {}
+    function claimCollateral() external {
+        uint256 amount = collSurplus[msg.sender];
+        require(amount > 0, "CollSurplusPool: No collateral available to claim");
+        collSurplus[msg.sender] = 0;
+        _send(msg.sender, amount);
+    }
 
     function getBorrowingFee(uint256 _debt) public pure returns (uint256) {
         return (_debt * BORROWING_RATE) / 1e18;
@@ -238,6 +249,38 @@ contract MockMUSDSystem {
 
     function checkRecoveryMode(uint256 _price) public view returns (bool) {
         return getTCR(_price) < CCR;
+    }
+
+    function getEntireSystemColl() public view returns (uint256 c) {
+        (c,) = _totals();
+    }
+
+    function getEntireSystemDebt() public view returns (uint256 d) {
+        (, d) = _totals();
+    }
+
+    /// @notice Liquidate one trove (permissionless, like TroveManager.liquidate).
+    function liquidate(address _borrower) external {
+        Trove storage t = troves[_borrower];
+        require(t.status == ITroveManager.Status.active, "TroveManager: Trove does not exist or is closed");
+        uint256 price = priceFeed.fetchPrice();
+        uint256 debt = _debtOf(t);
+        uint256 icr = (t.coll * price) / debt;
+        uint256 tcr = getTCR(price);
+        bool rm = tcr < CCR;
+        require(icr < MCR || (rm && icr < tcr), "TroveManager: nothing to liquidate");
+        uint256 surplus;
+        if (icr >= MCR) {
+            uint256 gasComp = t.coll / 200; // 0.5% collateral gas compensation
+            uint256 capped = (debt * MCR) / price;
+            if (t.coll > capped + gasComp) surplus = t.coll - capped - gasComp;
+        }
+        collSurplus[_borrower] += surplus;
+        t.status = ITroveManager.Status.closedByLiquidation;
+        t.coll = 0;
+        t.principal = 0;
+        t.interest = 0;
+        t.maxBorrowingCapacity = 0;
     }
 
     function getTroveOwnersCount() external view returns (uint256) {

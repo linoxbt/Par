@@ -6,6 +6,11 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IBorrowerOperations, ITroveManager, IPriceFeed} from "./interfaces/IMezo.sol";
 
+/// @dev Hook the factory exposes so vaultsOf() follows ownership transfers.
+interface IParFactoryHook {
+    function onVaultOwnerChanged(address from, address to) external;
+}
+
 /// @title ParVault
 /// @notice One vault per user (EIP-1167 clone). The vault is the MUSD trove's borrower,
 ///         so it controls the trove. Undrawn borrowing capacity is reserved against
@@ -55,6 +60,8 @@ contract ParVault is ReentrancyGuard {
         bool disputed;
         bool open;
         bytes32 evidence;
+        uint64 disputedAt; // when the claim was disputed (resolution deadline = disputedAt + RESOLVE_WINDOW)
+        uint64 rejectedAt; // last rejection by the arbiter (refiling cooldown = one challengeWindow)
     }
 
     // ------------------------------------------------------------------
@@ -72,7 +79,16 @@ contract ParVault is ReentrancyGuard {
     uint256 public targetIcr; // e.g. 1.6e18 = stay >= 160% after all reserved draws, at stressed price
 
     uint256 public constant CCR = 1.5e18; // MUSD Recovery Mode threshold
+    uint256 public constant MCR = 1.1e18; // MUSD minimum individual collateral ratio
     uint256 private constant RM_EPSILON = 1e15; // +0.1% so new ICR strictly improves
+    /// @notice Shortest allowed challenge window for Claim commitments.
+    uint32 public constant MIN_CHALLENGE_WINDOW = 60;
+    /// @notice An arbiter has this long after a dispute to resolve it. After that anyone may
+    ///         finalize the claim with the default outcome: APPROVE and pay. The owner chose the
+    ///         arbiter, so an absent arbiter is the owner's risk, not the beneficiary's.
+    uint256 public constant RESOLVE_WINDOW = 7 days;
+
+    address public pendingOwner; // two-step ownership transfer
 
     uint256 public reserved; // sum over active commitments of (cap - paidOut)
     uint256 public nextId;
@@ -93,6 +109,9 @@ contract ParVault is ReentrancyGuard {
     event ClaimResolved(uint256 indexed id, bool approved);
     event Payout(uint256 indexed id, address indexed to, uint256 amount, uint256 fromBuffer, uint256 minted);
     event CommitmentClosed(uint256 indexed id, uint256 released);
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event CollateralClaimed(uint256 amount);
 
     error NotOwner();
     error NotAuthorized();
@@ -106,6 +125,8 @@ contract ParVault is ReentrancyGuard {
     error ExceedsCap();
     error RecoveryModeNeedsReserve(uint256 btcNeeded);
     error ReservedCommitments();
+    error ClaimOpen();
+    error ReserveLocked();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -184,6 +205,14 @@ contract ParVault is ReentrancyGuard {
         _requireHealthy(0); // refinance re-snapshots capacity at the current price
     }
 
+    /// @notice After a liquidation or full redemption MUSD keeps any collateral surplus for the
+    ///         borrower (this vault). Pull it in; the owner can then withdraw it as idle BTC.
+    function claimCollateral() external onlyOwner nonReentrant {
+        uint256 before = address(this).balance;
+        borrowerOps.claimCollateral();
+        emit CollateralClaimed(address(this).balance - before);
+    }
+
     function closeTrove() external onlyOwner nonReentrant {
         if (reserved != 0) revert ReservedCommitments();
         borrowerOps.closeTrove(); // vault must hold entireDebt - 200 MUSD
@@ -191,13 +220,38 @@ contract ParVault is ReentrancyGuard {
     }
 
     /// @notice Owner may take buffer MUSD out (it is not counted in health checks).
+    ///         Allowed in Recovery Mode too: health never counts the buffer, so removing it
+    ///         cannot make a commitment unpayable that health considered payable.
     function withdrawMUSDBuffer(uint256 amount, address to) external onlyOwner nonReentrant {
         musd.safeTransfer(to, amount);
     }
 
-    /// @notice Withdraw idle BTC held by the vault (Recovery Mode reserve), not trove collateral.
+    /// @notice Withdraw idle BTC held by the vault (top-up reserve), not trove collateral.
+    ///         Blocked while Recovery Mode is active and commitments are reserved: in that state
+    ///         the idle BTC is exactly what lets a pending payout go through.
     function withdrawIdleBTC(uint256 amount) external onlyOwner nonReentrant {
+        if (
+            reserved != 0 && _troveActive() && troveManager.checkRecoveryMode(priceFeed.fetchPrice())
+        ) revert ReserveLocked();
         _sendBTC(owner, amount);
+    }
+
+    // ------------------------------------------------------------------
+    // Ownership (two-step)
+    // ------------------------------------------------------------------
+
+    function transferOwnership(address newOwner) external onlyOwner {
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert NotAuthorized();
+        address prev = owner;
+        owner = msg.sender;
+        pendingOwner = address(0);
+        IParFactoryHook(factory).onVaultOwnerChanged(prev, msg.sender);
+        emit OwnershipTransferred(prev, msg.sender);
     }
 
     // ------------------------------------------------------------------
@@ -215,9 +269,12 @@ contract ParVault is ReentrancyGuard {
         uint128 coverCap,
         uint64 expiry
     ) external onlyOwner returns (uint256 id) {
+        // Every installment must be triggerable before expiry: the last one becomes
+        // triggerable strictly after lastDue + grace, so expiry must lie beyond that.
         if (
             beneficiary == address(0) || installment == 0 || count == 0 || period == 0 || coverCap == 0
-                || coverCap > uint256(installment) * count || expiry <= block.timestamp
+                || coverCap > uint256(installment) * count || start < block.timestamp
+                || expiry <= uint256(start) + uint256(count - 1) * period + grace
         ) revert BadParams();
         id = _newCommitment(Kind.Scheduled, beneficiary, principal, address(0), coverCap, expiry);
         Commitment storage c = commitments[id];
@@ -236,16 +293,18 @@ contract ParVault is ReentrancyGuard {
         uint64 expiry,
         uint32 challengeWindow
     ) external onlyOwner returns (uint256 id) {
-        if (beneficiary == address(0) || arbiter == address(0) || cap == 0 || expiry <= block.timestamp) {
-            revert BadParams();
-        }
+        if (
+            beneficiary == address(0) || arbiter == address(0) || arbiter == owner || arbiter == beneficiary
+                || cap == 0 || expiry <= block.timestamp || challengeWindow < MIN_CHALLENGE_WINDOW
+        ) revert BadParams();
         id = _newCommitment(Kind.Claim, beneficiary, principal, arbiter, cap, expiry);
         commitments[id].challengeWindow = challengeWindow;
     }
 
     /// @param circuit the ParCircuit contract; it becomes the only address able to draw this line.
+    ///         Must be a contract: a line to an EOA would be an unconditional instant credit line.
     function createClearingLine(address circuit, uint128 cap, uint64 expiry) external onlyOwner returns (uint256 id) {
-        if (circuit == address(0) || cap == 0 || expiry <= block.timestamp) revert BadParams();
+        if (circuit.code.length == 0 || cap == 0 || expiry <= block.timestamp) revert BadParams();
         id = _newCommitment(Kind.ClearingLine, circuit, owner, address(0), cap, expiry);
     }
 
@@ -312,9 +371,16 @@ contract ParVault is ReentrancyGuard {
         if (c.kind != Kind.Claim || c.status != CStatus.Active) revert NotActive();
         if (msg.sender != c.beneficiary) revert NotAuthorized();
         if (block.timestamp > c.expiry) revert TooLate();
-        if (pendingClaims[id].open) revert BadParams();
+        PendingClaim storage p = pendingClaims[id];
+        if (p.open) revert BadParams();
+        if (p.rejectedAt != 0 && block.timestamp < uint256(p.rejectedAt) + c.challengeWindow) revert TooEarly();
         if (amount == 0 || amount > uint256(c.cap) - c.paidOut) revert ExceedsCap();
-        pendingClaims[id] = PendingClaim(amount, uint64(block.timestamp), false, true, evidence);
+        p.amount = amount;
+        p.filedAt = uint64(block.timestamp);
+        p.disputed = false;
+        p.open = true;
+        p.evidence = evidence;
+        p.disputedAt = 0;
         emit ClaimFiled(id, amount, evidence);
     }
 
@@ -325,24 +391,32 @@ contract ParVault is ReentrancyGuard {
         if (msg.sender != c.principal && msg.sender != owner) revert NotAuthorized();
         if (block.timestamp > p.filedAt + c.challengeWindow) revert TooLate();
         p.disputed = true;
+        p.disputedAt = uint64(block.timestamp);
         emit ClaimDisputed(id);
     }
 
+    /// @notice Arbiter decides a disputed claim, until disputedAt + RESOLVE_WINDOW.
     function resolveClaim(uint256 id, bool approve, address up, address lo) external nonReentrant {
         Commitment storage c = commitments[id];
         PendingClaim storage p = pendingClaims[id];
-        if (!p.open || !p.disputed) revert NotActive();
+        if (c.status != CStatus.Active || !p.open || !p.disputed) revert NotActive();
         if (msg.sender != c.arbiter) revert NotAuthorized();
+        if (block.timestamp > uint256(p.disputedAt) + RESOLVE_WINDOW) revert TooLate();
         p.open = false;
+        if (!approve) p.rejectedAt = uint64(block.timestamp);
         emit ClaimResolved(id, approve);
         if (approve) _payout(id, p.amount, up, lo);
     }
 
+    /// @notice Permissionless. Pays an undisputed claim after its challenge window, or a
+    ///         disputed claim the arbiter left unresolved past disputedAt + RESOLVE_WINDOW
+    ///         (default outcome: approve).
     function executeClaim(uint256 id, address up, address lo) external nonReentrant {
         Commitment storage c = commitments[id];
         PendingClaim storage p = pendingClaims[id];
-        if (!p.open || p.disputed) revert NotActive();
-        if (block.timestamp <= p.filedAt + c.challengeWindow) revert TooEarly();
+        if (c.status != CStatus.Active || !p.open) revert NotActive();
+        uint256 readyAt = p.disputed ? uint256(p.disputedAt) + RESOLVE_WINDOW : uint256(p.filedAt) + c.challengeWindow;
+        if (block.timestamp <= readyAt) revert TooEarly();
         p.open = false;
         emit ClaimResolved(id, true);
         _payout(id, p.amount, up, lo);
@@ -361,12 +435,13 @@ contract ParVault is ReentrancyGuard {
 
     // ---------------- Closing ----------------
 
-    /// @notice Beneficiary can release early. After expiry anyone can close (no open claim).
+    /// @notice Beneficiary can release early. After expiry anyone can close. Never while a claim
+    ///         is open: the open claim still has to be paid from this commitment's reservation.
     function closeCommitment(uint256 id) external {
         Commitment storage c = commitments[id];
         if (c.status != CStatus.Active) revert NotActive();
-        bool expired = block.timestamp > c.expiry && !pendingClaims[id].open;
-        if (!expired && msg.sender != c.beneficiary) revert NotAuthorized();
+        if (pendingClaims[id].open) revert ClaimOpen();
+        if (block.timestamp <= c.expiry && msg.sender != c.beneficiary) revert NotAuthorized();
         uint256 released = uint256(c.cap) - c.paidOut;
         c.status = CStatus.Closed;
         reserved -= released;
@@ -378,11 +453,12 @@ contract ParVault is ReentrancyGuard {
     // ------------------------------------------------------------------
 
     /// 1) pay from liquid MUSD buffer (seed draw, prior repayments)
-    /// 2) Normal Mode: mint the shortfall from the trove (withdrawMUSD)
-    /// 3) Recovery Mode: MUSD only allows a debt increase combined with a collateral
-    ///    top-up that leaves ICR >= 150% AND higher than before. Use idle BTC held by
-    ///    the vault as a top-up reserve. If not enough, revert with the BTC needed so
-    ///    a keeper can retry after the owner funds the reserve.
+    /// 2) Normal Mode: mint the shortfall from the trove (withdrawMUSD), as long as the
+    ///    draw keeps the trove >= MCR and the system TCR >= CCR (MUSD's Normal Mode rule)
+    /// 3) Otherwise (Recovery Mode, or a Normal Mode draw that would breach CCR/MCR):
+    ///    combine the draw with a collateral top-up from idle BTC held by the vault, sized
+    ///    by recoveryTopUp. If the vault holds too little, revert with the BTC needed so a
+    ///    keeper can retry after the owner funds the reserve.
     function _payout(uint256 id, uint256 amount, address up, address lo) internal {
         Commitment storage c = commitments[id];
         if (amount == 0) return;
@@ -396,11 +472,10 @@ contract ParVault is ReentrancyGuard {
         uint256 shortfall = amount - fromBuffer;
 
         if (shortfall > 0) {
-            uint256 price = priceFeed.fetchPrice();
-            if (!troveManager.checkRecoveryMode(price)) {
+            uint256 topUpNeeded = recoveryTopUp(shortfall, priceFeed.fetchPrice()); // reverts NotActive if no trove
+            if (topUpNeeded == 0) {
                 borrowerOps.withdrawMUSD(shortfall, up, lo);
             } else {
-                uint256 topUpNeeded = recoveryTopUp(shortfall, price);
                 if (address(this).balance < topUpNeeded) revert RecoveryModeNeedsReserve(topUpNeeded);
                 borrowerOps.adjustTrove{value: topUpNeeded}(0, shortfall, true, up, lo);
             }
@@ -422,15 +497,31 @@ contract ParVault is ReentrancyGuard {
         capacity = troveManager.getTroveMaxBorrowingCapacity(address(this));
     }
 
-    /// @notice BTC to add alongside a draw of `draw` MUSD so the new ICR is >= max(oldICR, CCR) + epsilon.
+    /// @notice BTC to add alongside a draw of `draw` MUSD at `price` so MUSD accepts the debt increase.
+    ///         Recovery Mode: new ICR >= max(oldICR, CCR) + epsilon (always > 0).
+    ///         Normal Mode: 0 if the plain draw keeps ICR >= MCR and system TCR >= CCR; otherwise
+    ///         enough BTC that both hold again (+ epsilon). Reverts NotActive without an active trove.
     function recoveryTopUp(uint256 draw, uint256 price) public view returns (uint256) {
+        if (!_troveActive()) revert NotActive();
         (uint256 coll, uint256 debt,) = troveState();
-        uint256 fee = borrowerOps.getBorrowingFee(draw);
-        uint256 oldIcr = debt == 0 ? type(uint256).max : (coll * price) / debt;
-        uint256 target = (oldIcr > CCR ? oldIcr : CCR) + RM_EPSILON;
-        uint256 newDebt = debt + draw + fee;
-        uint256 collNeeded = (newDebt * target + price - 1) / price; // ceil
-        return collNeeded > coll ? collNeeded - coll : 0;
+        uint256 change = draw + borrowerOps.getBorrowingFee(draw); // fee: exact in Normal Mode, margin in RM
+        if (troveManager.checkRecoveryMode(price)) {
+            uint256 oldIcr = (coll * price) / debt;
+            uint256 target = (oldIcr > CCR ? oldIcr : CCR) + RM_EPSILON;
+            uint256 collNeeded = ((debt + change) * target + price - 1) / price; // ceil
+            return collNeeded > coll ? collNeeded - coll : 0;
+        }
+        uint256 forIcr = _collShortfall(coll, debt + change, MCR, price);
+        uint256 forTcr =
+            _collShortfall(troveManager.getEntireSystemColl(), troveManager.getEntireSystemDebt() + change, CCR, price);
+        return forIcr > forTcr ? forIcr : forTcr;
+    }
+
+    /// @dev 0 if coll * price / debt >= cr already, else BTC so it reaches cr + epsilon.
+    function _collShortfall(uint256 coll, uint256 debt, uint256 cr, uint256 price) internal pure returns (uint256) {
+        if ((coll * price) / debt >= cr) return 0;
+        uint256 need = (debt * (cr + RM_EPSILON) + price - 1) / price;
+        return need > coll ? need - coll : 0;
     }
 
     /// @notice Health = (a) every reserved MUSD can still be minted under the capacity
@@ -441,7 +532,7 @@ contract ParVault is ReentrancyGuard {
         view
         returns (bool ok, uint256 stressedIcr, uint256 headroom)
     {
-        if (troveManager.getTroveStatus(address(this)) != ITroveManager.Status.active) return (false, 0, 0);
+        if (!_troveActive()) return (false, 0, 0);
         (uint256 coll, uint256 debt, uint256 capacity) = troveState();
         uint256 r = reserved + extraReserve;
         uint256 need = r + borrowerOps.getBorrowingFee(r);
@@ -454,9 +545,11 @@ contract ParVault is ReentrancyGuard {
         ok = capOk && stressedIcr >= targetIcr;
     }
 
+    /// @notice MUSD this commitment can still pay. 0 once closed, expired, or when the trove is
+    ///         not active (liquidated, redeemed or closed): nothing can be minted against it.
     function available(uint256 id) external view returns (uint256) {
         Commitment storage c = commitments[id];
-        if (c.status != CStatus.Active || block.timestamp > c.expiry) return 0;
+        if (c.status != CStatus.Active || block.timestamp > c.expiry || !_troveActive()) return 0;
         return uint256(c.cap) - c.paidOut;
     }
 
@@ -471,6 +564,10 @@ contract ParVault is ReentrancyGuard {
     {
         Commitment storage c = commitments[id];
         return (c.kind, c.status, c.beneficiary, c.cap, c.paidOut, c.expiry);
+    }
+
+    function _troveActive() internal view returns (bool) {
+        return troveManager.getTroveStatus(address(this)) == ITroveManager.Status.active;
     }
 
     function _requireHealthy(uint256 extra) internal view {

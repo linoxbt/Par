@@ -19,8 +19,13 @@ contract ParFactory {
 
     mapping(address => address[]) public vaultsOf;
     address[] public allVaults;
+    mapping(address => bool) public isVault;
+    mapping(address => uint256) private ownerIndex; // vault => position in vaultsOf[owner]
 
     event VaultCreated(address indexed owner, address vault);
+    event VaultOwnerChanged(address indexed vault, address indexed from, address indexed to);
+
+    error NotVault();
 
     constructor(
         IBorrowerOperations _bo,
@@ -44,9 +49,27 @@ contract ParFactory {
         ParVault(payable(vault)).initialize(
             msg.sender, borrowerOps, troveManager, priceFeed, musd, stressBps, targetIcr
         );
+        isVault[vault] = true;
+        ownerIndex[vault] = vaultsOf[msg.sender].length;
         vaultsOf[msg.sender].push(vault);
         allVaults.push(vault);
         emit VaultCreated(msg.sender, vault);
+    }
+
+    /// @notice Called by a vault when its two-step ownership transfer completes, so
+    ///         vaultsOf(newOwner) lists it and vaultsOf(oldOwner) no longer does.
+    function onVaultOwnerChanged(address from, address to) external {
+        address vault = msg.sender;
+        if (!isVault[vault]) revert NotVault();
+        address[] storage list = vaultsOf[from];
+        uint256 i = ownerIndex[vault];
+        address last = list[list.length - 1];
+        list[i] = last;
+        ownerIndex[last] = i;
+        list.pop();
+        ownerIndex[vault] = vaultsOf[to].length;
+        vaultsOf[to].push(vault);
+        emit VaultOwnerChanged(vault, from, to);
     }
 
     function vaultCount(address owner) external view returns (uint256) {
