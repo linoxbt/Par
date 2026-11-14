@@ -53,7 +53,7 @@ export function CircuitGraph({
     <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full">
       <defs>
         <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" orient="auto-start-reverse">
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="#a3aab8" />
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#B4BDD0" />
         </marker>
         <marker id="arr-btc" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" orient="auto-start-reverse">
           <path d="M 0 0 L 10 5 L 0 10 z" fill="#F7931A" />
@@ -62,11 +62,11 @@ export function CircuitGraph({
 
       {/* hub */}
       <motion.g animate={{ opacity: netted ? 1 : 0.35 }}>
-        <circle cx={CX} cy={CY} r={36} fill="#171a21" stroke="#F7931A" strokeWidth={netted ? 2 : 1} />
-        <text x={CX} y={CY - 2} textAnchor="middle" className="fill-white text-[12px] font-semibold">
+        <circle cx={CX} cy={CY} r={36} fill="#101C35" stroke="#F7931A" strokeWidth={netted ? 2 : 1} />
+        <text x={CX} y={CY - 2} textAnchor="middle" className="fill-white font-serif text-[15px]">
           Par
         </text>
-        <text x={CX} y={CY + 13} textAnchor="middle" className="fill-[#7b8394] text-[10px]">
+        <text x={CX} y={CY + 13} textAnchor="middle" className="fill-[#8592AD] text-[10px]">
           Circuit
         </text>
       </motion.g>
@@ -82,13 +82,13 @@ export function CircuitGraph({
                 <motion.path
                   d={d}
                   fill="none"
-                  stroke={on ? "#F7931A" : "#7b8394"}
+                  stroke={on ? "#F7931A" : "#8592AD"}
                   markerEnd={on ? "url(#arr-btc)" : "url(#arr)"}
                   animate={{ strokeWidth: 1.5 + (8 * e.amount) / max }}
                   transition={{ duration: 0.6 }}
                 />
-                <rect x={mid.x - 30} y={mid.y - 10} width={60} height={20} rx={6} fill="#0b0c0f" opacity={0.85} />
-                <text x={mid.x} y={mid.y + 4} textAnchor="middle" className={`font-mono text-[11px] ${on ? "fill-[#F7931A]" : "fill-[#a3aab8]"}`}>
+                <rect x={mid.x - 30} y={mid.y - 10} width={60} height={20} rx={6} fill="#070D1B" opacity={0.85} />
+                <text x={mid.x} y={mid.y + 4} textAnchor="middle" className={`font-mono text-[11px] ${on ? "fill-[#F7931A]" : "fill-[#B4BDD0]"}`}>
                   {fmt(e.amount)}
                 </text>
               </motion.g>
@@ -114,7 +114,7 @@ export function CircuitGraph({
                     animate={{ pathLength: 1 }}
                     transition={{ duration: 0.8 }}
                   />
-                  <rect x={mid.x - 30} y={mid.y - 10} width={60} height={20} rx={6} fill="#0b0c0f" opacity={0.9} />
+                  <rect x={mid.x - 30} y={mid.y - 10} width={60} height={20} rx={6} fill="#070D1B" opacity={0.9} />
                   <text x={mid.x} y={mid.y + 4} textAnchor="middle" className="fill-[#F7931A] font-mono text-[11px]">
                     {fmt(Math.abs(n.net ?? 0))}
                   </text>
@@ -128,12 +128,12 @@ export function CircuitGraph({
         const net = n.net ?? 0
         return (
           <g key={n.id}>
-            <circle cx={p.x} cy={p.y} r={38} fill="#111318" stroke={net < 0 ? "#ef4444" : net > 0 ? "#22c55e" : "#2c313c"} strokeWidth={2} />
+            <circle cx={p.x} cy={p.y} r={38} fill="#0B1427" stroke={net < 0 ? "#E5484D" : net > 0 ? "#3FBF7F" : "#2A3B60"} strokeWidth={2} />
             <text x={p.x} y={p.y + 4} textAnchor="middle" className="fill-white text-[10px] font-semibold">
               {n.label}
             </text>
             {n.sub && (
-              <text x={p.x} y={p.y + 54} textAnchor="middle" className="fill-[#7b8394] font-mono text-[10px]">
+              <text x={p.x} y={p.y + 54} textAnchor="middle" className="fill-[#8592AD] font-mono text-[10px]">
                 {n.sub}
               </text>
             )}

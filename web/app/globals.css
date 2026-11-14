@@ -1,3 +1,8 @@
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
+@import "@fontsource-variable/urbanist/index.css";
+@import "@fontsource-variable/jetbrains-mono/index.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,8 +11,30 @@
   color-scheme: dark;
 }
 body {
-  @apply bg-ink-950 text-white antialiased;
+  @apply bg-ink-950 font-sans text-white antialiased;
 }
-.num {
-  @apply font-mono tabular-nums;
+
+@layer components {
+  .num {
+    @apply font-mono tabular-nums;
+  }
+  /* small mono index label: "01 / CAPACITY" */
+  .eyebrow {
+    @apply font-mono text-[11px] uppercase tracking-[0.18em] text-btc;
+  }
+  .label {
+    @apply font-mono text-[11px] uppercase tracking-[0.14em] text-ink-400;
+  }
+  .display {
+    @apply font-serif font-normal leading-[1.02] tracking-[-0.01em];
+  }
+  .paper {
+    @apply bg-paper text-paper-ink;
+  }
+  /* faint navy grid behind hero panels */
+  .gridlines {
+    background-image: linear-gradient(to right, rgba(133, 146, 173, 0.08) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(133, 146, 173, 0.08) 1px, transparent 1px);
+    background-size: 80px 80px;
+  }
 }

@@ -5,7 +5,7 @@ import { addrUrl, txUrl } from "@/lib/config"
 import { short } from "@/lib/format"
 
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`rounded-2xl border border-ink-700 bg-ink-900 p-5 ${className}`}>{children}</div>
+  return <div className={`rounded-[3px] border border-ink-700 bg-ink-900/80 p-6 ${className}`}>{children}</div>
 }
 
 export function Stat({
@@ -32,7 +32,7 @@ export function Stat({
   )
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs uppercase tracking-wider text-ink-400">{label}</span>
+      <span className="label">{label}</span>
       {href ? (
         <a href={href} target="_blank" rel="noreferrer" className="hover:underline">
           {v}
@@ -79,10 +79,10 @@ export function Button({
   className?: string
   type?: "button" | "submit"
 }) {
-  const base = "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40"
+  const base = "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[3px] px-4 py-2.5 text-sm font-semibold tracking-wide transition disabled:cursor-not-allowed disabled:opacity-40"
   const style =
     variant === "primary"
-      ? "bg-btc text-ink-950 hover:bg-[#ffa53d]"
+      ? "bg-btc text-ink-950 hover:bg-btc-soft"
       : variant === "danger"
         ? "bg-bad/90 text-white hover:bg-bad"
         : "border border-ink-600 text-ink-300 hover:border-btc hover:text-white"
@@ -96,9 +96,9 @@ export function Button({
 
 export function LinkButton({ href, children, variant = "primary" }: { href: string; children: React.ReactNode; variant?: "primary" | "ghost" }) {
   const style =
-    variant === "primary" ? "bg-btc text-ink-950 hover:bg-[#ffa53d]" : "border border-ink-600 text-ink-300 hover:border-btc hover:text-white"
+    variant === "primary" ? "bg-btc text-ink-950 hover:bg-btc-soft" : "border border-ink-600 text-white hover:border-btc"
   return (
-    <Link href={href} className={`inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-semibold transition ${style}`}>
+    <Link href={href} className={`inline-flex items-center justify-center gap-2 rounded-[3px] px-5 py-3 text-sm font-semibold tracking-wide transition ${style}`}>
       {children}
     </Link>
   )
@@ -118,7 +118,7 @@ export function TxStatus({ tx }: { tx: { hash?: string; error?: string; busy: bo
 export function Field({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-xs uppercase tracking-wider text-ink-400">{label}</span>
+      <span className="label">{label}</span>
       {children}
       {hint && <span className="text-xs text-ink-400">{hint}</span>}
     </label>
@@ -126,7 +126,7 @@ export function Field({ label, hint, children }: { label: string; hint?: React.R
 }
 
 export const inputCls =
-  "w-full rounded-xl border border-ink-600 bg-ink-950 px-3 py-2.5 font-mono text-sm text-white outline-none focus:border-btc"
+  "w-full rounded-[3px] border border-ink-600 bg-ink-950/70 px-3 py-2.5 font-mono text-sm text-white outline-none placeholder:text-ink-600 focus:border-btc"
 
 export function Badge({ tone, children }: { tone: "ok" | "warn" | "bad" | "muted" | "btc"; children: React.ReactNode }) {
   const c =
@@ -139,11 +139,11 @@ export function Badge({ tone, children }: { tone: "ok" | "warn" | "bad" | "muted
           : tone === "btc"
             ? "bg-btc/15 text-btc border-btc/30"
             : "bg-ink-700 text-ink-300 border-ink-600"
-  return <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${c}`}>{children}</span>
+  return <span className={`inline-flex items-center gap-1.5 rounded-[3px] border px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.12em] ${c}`}>{children}</span>
 }
 
 export function Empty({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-2xl border border-dashed border-ink-600 p-8 text-center text-ink-400">{children}</div>
+  return <div className="rounded-[3px] border border-dashed border-ink-600 p-10 text-center text-ink-300">{children}</div>
 }
 
 /** Stressed ICR vs target, on a 0..(target*2) scale. */
@@ -153,14 +153,44 @@ export function HealthGauge({ stressedIcr, target, ok }: { stressedIcr: bigint; 
   const tPct = (Number(target) / max) * 100
   return (
     <div>
-      <div className="relative h-3 overflow-hidden rounded-full bg-ink-700">
-        <div className={`h-full rounded-full ${ok ? "bg-ok" : "bg-bad"}`} style={{ width: `${pct}%` }} />
+      <div className="relative h-2 overflow-hidden rounded-[2px] bg-ink-700">
+        <div className={`h-full ${ok ? "bg-btc" : "bg-bad"}`} style={{ width: `${pct}%` }} />
         <div className="absolute top-0 h-full w-0.5 bg-white/70" style={{ left: `${tPct}%` }} />
       </div>
-      <div className="mt-1 flex justify-between text-[11px] text-ink-400">
+      <div className="mt-1.5 flex justify-between font-mono text-[10px] uppercase tracking-wider text-ink-400">
         <span>stressed ICR</span>
         <span>target {Math.round(Number(target) / 1e16)}%</span>
       </div>
+    </div>
+  )
+}
+
+/** Page heading in the serif/mono system: "01 / VAULT" eyebrow, serif title, optional subline. */
+export function PageHead({ index, eyebrow, title, sub, right }: { index?: string; eyebrow: string; title: React.ReactNode; sub?: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-4 border-b border-ink-700 pb-6">
+      <div className="max-w-2xl">
+        <div className="eyebrow">
+          {index ? `${index} / ` : ""}
+          {eyebrow}
+        </div>
+        <h1 className="display mt-3 text-4xl sm:text-5xl">{title}</h1>
+        {sub && <p className="mt-3 text-ink-300">{sub}</p>}
+      </div>
+      {right}
+    </div>
+  )
+}
+
+/** Card section title with a mono index. */
+export function CardTitle({ index, children, right }: { index?: string; children: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <div className="mb-5 flex items-center justify-between gap-3">
+      <div className="flex items-baseline gap-3">
+        {index && <span className="font-mono text-[11px] text-btc">{index}</span>}
+        <h2 className="font-serif text-2xl">{children}</h2>
+      </div>
+      {right}
     </div>
   )
 }

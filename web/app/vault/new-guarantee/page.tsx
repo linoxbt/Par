@@ -9,7 +9,7 @@ import { ConnectButton } from "@rainbow-me/rainbowkit"
 import { parVaultAbi } from "@/lib/abi"
 import { fmtMusd, fmtRatio } from "@/lib/format"
 import { useMe, useProtocol, useTx, useVault, useVaultsOf } from "@/lib/hooks"
-import { Button, Card, Empty, Field, LinkButton, TxStatus, inputCls } from "@/components/ui"
+import { Button, Card, Empty, Field, LinkButton, PageHead, TxStatus, inputCls } from "@/components/ui"
 
 const PERIODS = [
   { label: "Monthly", sec: 30 * 86400, grace: 3 * 86400 },
@@ -137,7 +137,7 @@ function Builder() {
   if (created !== undefined)
     return (
       <Card className="flex flex-col items-start gap-4">
-        <h1 className="text-2xl font-bold">Promise made.</h1>
+        <h1 className="display text-5xl">Promise <em className="text-btc">made.</em></h1>
         <p className="text-ink-300">Nothing has been borrowed. Send the certificate link to the beneficiary.</p>
         <div className="flex gap-3">
           <LinkButton href={`/c/${vault}/${created}`}>Open certificate</LinkButton>
@@ -152,13 +152,13 @@ function Builder() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">New guarantee</h1>
+      <PageHead index="02" eyebrow="Guarantee builder" title={<>Make a <em className="text-btc">promise.</em></>} sub="Every promise is stress-tested before it exists: BTC −40%, everything called at once, vault still above 160%." />
       <div className="flex gap-2">
         {(["rent", "bond"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setType(t)}
-            className={`rounded-xl border px-4 py-2 text-sm ${type === t ? "border-btc bg-btc/10 text-btc" : "border-ink-600 text-ink-300"}`}
+            className={`rounded-[3px] border px-4 py-2 font-mono text-xs uppercase tracking-wider ${type === t ? "border-btc bg-btc/10 text-btc" : "border-ink-600 text-ink-300"}`}
           >
             {t === "rent" ? "Rent / installments" : "Bond / claim"}
           </button>
@@ -224,10 +224,10 @@ function Builder() {
         </Card>
 
         <Card className="flex flex-col gap-4">
-          <h2 className="font-semibold">Fits?</h2>
+          <div className="label">Stress test</div>
           {fit ? (
             <>
-              <div className={`text-3xl font-bold ${fit[0] ? "text-ok" : "text-bad"}`}>{fit[0] ? "Fits" : "Doesn't fit"}</div>
+              <div className={`display text-5xl ${fit[0] ? "text-btc" : "text-bad"}`}>{fit[0] ? "Fits" : "Doesn't fit"}</div>
               <p className="text-sm text-ink-300">
                 After this promise, if BTC fell {p ? Number(p.stressBps) / 100 : 40}% and every promise were called at once, the vault would sit at{" "}
                 <b className="num">{fmtRatio(fit[1])}</b> (needs ≥ {p ? fmtRatio(p.targetIcr) : "160%"}).
@@ -238,7 +238,7 @@ function Builder() {
             <p className="text-sm text-ink-400">Enter an amount.</p>
           )}
           {type === "rent" && (
-            <div className="rounded-xl bg-ink-950 p-3 text-xs text-ink-300">
+            <div className="rounded-[3px] bg-ink-950 p-3 text-xs text-ink-300">
               {count || 0} × {installment || 0} MUSD, {period.label.toLowerCase()}. If a payment is more than {period.grace}s late, anyone
               (the keeper) can trigger the vault to pay it. Total cover {cover || 0} MUSD.
             </div>

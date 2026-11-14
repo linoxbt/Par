@@ -181,6 +181,11 @@ npm install && npm start
 | `/circuit/[circle]` | Circuit board: member graph, invoice edges, gross / owed / efficiency meter, cycle countdown, **Clear cycle** animation (browser-side cycle cancellation ending on "2,900 cleared · 100 moved · 96.55% netted"), settle / force-settle / claim, admin add-member |
 | `/circuit/[circle]/invoice` | Create, accept, reject |
 
+Design: dark navy with one metal accent (Bitcoin orange), warm paper sections, Instrument Serif headlines,
+Urbanist body and JetBrains Mono numbers, a live oracle/TCR ticker, and a paper "assay-style" certificate.
+The direction is adapted from the [Aurelo Saving](https://www.framer.com/marketplace/templates/aurelo-saving/)
+Framer template's design language; no template assets, images or copy are used.
+
 Wallets: Mezo Passport (`getConfig`, Xverse / Unisat / OKX + EVM wallets). With a BTC wallet Passport routes
 transactions through a smart account on Mezo, which becomes the vault owner. `NEXT_PUBLIC_CHAIN=local` uses
 plain RainbowKit for the Hardhat node.

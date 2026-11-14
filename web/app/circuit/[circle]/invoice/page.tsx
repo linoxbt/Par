@@ -10,7 +10,7 @@ import { CIRCUIT } from "@/lib/config"
 import { useCircle, useInvoices, type Invoice } from "@/lib/circuit"
 import { fmtMusd, short } from "@/lib/format"
 import { useMe, useTx } from "@/lib/hooks"
-import { Addr, Badge, Button, Card, Empty, Field, TxStatus, inputCls } from "@/components/ui"
+import { Addr, Badge, Button, Card, CardTitle, Empty, Field, TxStatus, inputCls } from "@/components/ui"
 
 const Z = "0x0000000000000000000000000000000000000000" as Address
 
@@ -57,14 +57,14 @@ export default function InvoicesPage({ params }: { params: { circle: string } })
         <Link href={`/circuit/${circleId}`} className="text-xs text-ink-400 hover:text-white">
           ← circle #{String(circleId)}
         </Link>
-        <h1 className="text-2xl font-bold">Invoices</h1>
+        <h1 className="display mt-2 text-5xl">Invoices</h1>
         {!isMember && <p className="text-sm text-warn">You are not a member of this circle.</p>}
         {isMember && <p className="text-sm text-ink-400">Your clearing line available: {fmtMusd(limit, 0)} MUSD · current cycle {String(s.current ?? "")}</p>}
       </div>
 
       {isMember && (
         <Card className="flex flex-col gap-4">
-          <h2 className="font-semibold">Bill a member</h2>
+          <CardTitle index="01">Bill a member</CardTitle>
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="Debtor">
               <select className={inputCls} value={debtor} onChange={(e) => setDebtor(e.target.value)}>
@@ -114,7 +114,7 @@ export default function InvoicesPage({ params }: { params: { circle: string } })
 function InvoiceList({ title, list, me, current, onDone }: { title: string; list: Invoice[]; me?: Address; current?: bigint; onDone: () => void }) {
   return (
     <Card className="flex flex-col gap-2">
-      <h2 className="mb-1 font-semibold">{title}</h2>
+      <CardTitle>{title}</CardTitle>
       {list.length === 0 && <p className="text-sm text-ink-400">None.</p>}
       {list.map((i) => (
         <InvoiceRow key={String(i.id)} i={i} me={me} current={current} onDone={onDone} />

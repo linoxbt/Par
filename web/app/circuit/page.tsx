@@ -9,7 +9,7 @@ import { CIRCUIT } from "@/lib/config"
 import { useCircles } from "@/lib/circuit"
 import { fmtDuration } from "@/lib/format"
 import { useMe, useTx } from "@/lib/hooks"
-import { Addr, Button, Card, Empty, Field, TxStatus, inputCls } from "@/components/ui"
+import { Addr, Button, Card, CardTitle, Empty, Field, PageHead, TxStatus, inputCls } from "@/components/ui"
 
 const PRESETS = [
   { label: "Weekly (2-day settle)", cycle: 7 * 86400, window: 2 * 86400 },
@@ -34,22 +34,21 @@ export default function CircuitHome() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">Par Circuit</h1>
-        <p className="mt-1 max-w-2xl text-ink-300">
-          Trade-credit clearing for businesses that sell to each other. Members log invoices; the contract nets them as they are
-          accepted. At cycle end only net debtors pay, and a defaulter is force-settled from the clearing line in their Par vault.
-        </p>
-      </div>
+      <PageHead
+        index="03"
+        eyebrow="Par Circuit"
+        title={<>Trade credit that <em className="text-btc">clears itself.</em></>}
+        sub="Members log invoices; the contract nets them as they're accepted. At cycle end only net debtors pay, and a defaulter is force-settled from the clearing line in their Par vault."
+      />
 
       {circles.length === 0 ? (
         <Empty>No circles yet.</Empty>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {circles.map((c) => (
-            <Link key={String(c.id)} href={`/circuit/${c.id}`} className="rounded-2xl border border-ink-700 bg-ink-900 p-5 transition hover:border-btc">
+            <Link key={String(c.id)} href={`/circuit/${c.id}`} className="rounded-[3px] border border-ink-700 bg-ink-900 p-5 transition hover:border-btc">
               <div className="flex items-center justify-between">
-                <span className="text-lg font-semibold">Circle #{String(c.id)}</span>
+                <span className="font-serif text-3xl">Circle №{String(c.id)}</span>
                 <span className="text-xs text-ink-400">{c.members.length} members</span>
               </div>
               <p className="mt-2 text-sm text-ink-400">
@@ -65,7 +64,7 @@ export default function CircuitHome() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="flex flex-col gap-4">
-          <h2 className="font-semibold">Start a circle</h2>
+          <CardTitle index="01">Start a circle</CardTitle>
           <p className="text-sm text-ink-400">You become its admin and decide who joins (a circle is a closed trade group).</p>
           <Field label="Cycle">
             <select className={inputCls} value={preset} onChange={(e) => setPreset(Number(e.target.value))}>
@@ -90,7 +89,7 @@ export default function CircuitHome() {
           <TxStatus tx={t} />
         </Card>
         <Card className="flex flex-col gap-3 text-sm text-ink-300">
-          <h2 className="font-semibold text-white">How to join</h2>
+          <CardTitle index="02">How to join</CardTitle>
           <ol className="list-decimal space-y-2 pl-5">
             <li>
               Open a vault on the{" "}

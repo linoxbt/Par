@@ -11,7 +11,7 @@ import { CIRCUIT, FACTORY, addrUrl } from "@/lib/config"
 import { fmtBps, fmtBtc, fmtDate, fmtMusd, fmtPct, fmtRatio, fmtUsd, short, toNum } from "@/lib/format"
 import { KIND_LABEL, errorText, useChainNow, useCommitments, useMarket, useMe, useProtocol, useTx, useVault, useVaultsOf } from "@/lib/hooks"
 import { liquidationPrice, maxDrop, openPreview } from "@/lib/risk"
-import { Addr, Badge, Button, Card, Empty, Field, HealthGauge, LinkButton, Stat, TxLink, TxStatus, inputCls } from "@/components/ui"
+import { Addr, Badge, Button, Card, CardTitle, Empty, Field, HealthGauge, LinkButton, PageHead, Stat, TxLink, TxStatus, inputCls } from "@/components/ui"
 
 const Z = "0x0000000000000000000000000000000000000000" as Address
 
@@ -43,8 +43,8 @@ function VaultInner() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Your vault</h1>
+      <div className="flex flex-col gap-4">
+        <PageHead index="01" eyebrow="Vault" title="Your vault" sub="One trove, many promises. Capacity and rate are fixed at open; health is re-checked on every action." />
         {vaults.length > 1 && (
           <select
             className={inputCls + " w-auto"}
@@ -89,7 +89,7 @@ function CreateVault({ onDone, secondary }: { onDone: () => void; secondary?: bo
     )
   return (
     <Card className="flex flex-col items-start gap-4">
-      <h2 className="text-lg font-semibold">Create your Par vault</h2>
+      <CardTitle index="01">Create your Par vault</CardTitle>
       <p className="text-ink-300">
         A vault is your own contract (an EIP-1167 clone). It owns a MUSD trove on Mezo and holds your promises. Only you
         control it.
@@ -118,7 +118,7 @@ function OpenTrove({ vault, onDone }: { vault: Address; onDone: () => void }) {
   return (
     <Card className="flex flex-col gap-6">
       <div>
-        <h2 className="text-lg font-semibold">Open the trove</h2>
+        <CardTitle index="02">Open the trove</CardTitle>
         <p className="mt-1 text-sm text-ink-300">
           Open with <b>all</b> the BTC you intend to pledge. MUSD snapshots your borrowing capacity and locks your rate at open; later
           top-ups add safety, not capacity. The seed draw (MUSD&apos;s minimum loan) stays in the vault as a buffer that pays the first
@@ -143,7 +143,7 @@ function OpenTrove({ vault, onDone }: { vault: Address; onDone: () => void }) {
             <input className={inputCls} placeholder={formatEther(m.minNetDebt)} value={seed} onChange={(e) => setSeed(e.target.value)} />
           </Field>
         </div>
-        <div className="grid grid-cols-2 gap-4 rounded-xl bg-ink-950 p-4">
+        <div className="grid grid-cols-2 gap-5 rounded-[3px] border border-ink-700 bg-ink-950/60 p-5">
           <Stat label="Collateral value" value={pv ? fmtUsd(toNum(pv.value)) : "–"} />
           <Stat label="Rate locked at" value={m.globalRate !== undefined ? fmtBps(m.globalRate) : "–"} sub="fixed for the whole capacity" />
           <Stat label="Capacity snapshot" value={fmtMusd(pv?.capacity, 0)} unit="MUSD" sub="coll × price / 1.1" />
@@ -189,7 +189,7 @@ function Dashboard({ vault }: { vault: Address }) {
     <div className="flex flex-col gap-6">
       {m.recoveryMode && <RecoveryBanner vault={vault} reserved={v.reserved} buffer={v.buffer} price={m.price} idle={v.idleBtc} />}
       {!v.healthOk && (
-        <div className="rounded-xl border border-bad/40 bg-bad/10 p-4 text-sm text-bad">
+        <div className="rounded-[3px] border border-bad/40 bg-bad/10 p-4 text-sm text-bad">
           Under-reserved: at today&apos;s price this vault no longer passes the stress test. Existing promises are still honored, but no new
           ones can be made and collateral can&apos;t be withdrawn. Top up to restore health.
         </div>
@@ -198,7 +198,7 @@ function Dashboard({ vault }: { vault: Address }) {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Trove</h2>
+            <h2 className="font-serif text-2xl"><span className="mr-3 font-mono text-[11px] text-btc">01</span>Trove</h2>
             <a href={addrUrl(vault)} target="_blank" rel="noreferrer" className="num text-xs text-ink-400 hover:text-btc">
               {short(vault)} ↗
             </a>
@@ -213,7 +213,7 @@ function Dashboard({ vault }: { vault: Address }) {
           </div>
         </Card>
         <Card>
-          <h2 className="mb-4 font-semibold">Promises</h2>
+          <CardTitle index="02">Promises</CardTitle>
           <div className="flex flex-col gap-4">
             <Stat label="Reserved" value={fmtMusd(v.reserved, 0)} unit="MUSD" sub="undrawn capacity pledged" />
             <HealthGauge stressedIcr={v.stressedIcr} target={p.targetIcr} ok={v.healthOk} />
@@ -229,7 +229,7 @@ function Dashboard({ vault }: { vault: Address }) {
 
       <Card>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-semibold">Commitments</h2>
+          <h2 className="font-serif text-2xl"><span className="mr-3 font-mono text-[11px] text-btc">03</span>Commitments</h2>
           {isOwner && (
             <LinkButton href={`/vault/new-guarantee?v=${vault}`} variant="ghost">
               + New guarantee
@@ -241,7 +241,7 @@ function Dashboard({ vault }: { vault: Address }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase text-ink-400">
+              <thead className="text-left font-mono text-[10px] uppercase tracking-widest text-ink-400">
                 <tr>
                   <th className="py-2">#</th>
                   <th>Type</th>
@@ -306,7 +306,7 @@ function RecoveryBanner({ vault, reserved, buffer, price, idle }: { vault: Addre
     query: { enabled: draw > 0n && !!price },
   })
   return (
-    <div className="rounded-xl border border-warn/40 bg-warn/10 p-4 text-sm text-warn">
+    <div className="rounded-[3px] border border-warn/40 bg-warn/10 p-4 text-sm text-warn">
       <b>Mezo is in Recovery Mode.</b> MUSD only lets debt rise alongside a collateral top-up that improves the ratio. Promises stay
       valid; to pay {fmtMusd(draw, 0)} MUSD beyond the buffer this vault needs {need !== undefined ? fmtBtc(need, 6) : "…"} BTC of idle
       reserve (it has {fmtBtc(idle, 6)}). Fund it below; the keeper retries automatically.
@@ -336,7 +336,7 @@ function Manage({ vault, buffer, idle, onDone }: { vault: Address; buffer: bigin
 
   return (
     <Card className="flex flex-col gap-5">
-      <h2 className="font-semibold">Manage</h2>
+      <CardTitle index="04">Manage</CardTitle>
       <Row label="Top up collateral (adds safety, not capacity)">
         <input className={inputCls} placeholder="BTC" value={topUp} onChange={(e) => setTopUp(e.target.value)} />
         <Button busy={tTop.busy} disabled={!topUp} onClick={() => tx(tTop, { address: vault, abi: parVaultAbi, functionName: "topUp", args: [Z, Z], value: parseEther(topUp) })}>
@@ -405,7 +405,7 @@ function ClearingLineForm({ vault, onDone, headroomHint }: { vault: Address; onD
   const expiry = useMemo(() => BigInt(Math.floor(Date.now() / 1000) + Number(days || 0) * 86400), [days])
   return (
     <Card className="flex flex-col gap-4">
-      <h2 className="font-semibold">Pledge a Circuit clearing line</h2>
+      <CardTitle index="05">Pledge a Circuit clearing line</CardTitle>
       <p className="text-sm text-ink-300">
         Join a trade circle: pledge a credit line to the Par Circuit contract. It can only draw this line to force-settle what you
         owe at cycle end. Then ask the circle admin to add you with this vault and the line id.

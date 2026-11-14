@@ -8,7 +8,7 @@ import { parVaultAbi } from "@/lib/abi"
 import { erc20Abi } from "@/lib/mezoAbi"
 import { fmtDate, fmtDuration, fmtMusd } from "@/lib/format"
 import { useChainNow, useCommitment, useMe, useProtocol, useTx } from "@/lib/hooks"
-import { Addr, Button, Card, Empty, TxStatus } from "@/components/ui"
+import { Addr, Button, Card, Empty, PageHead, TxStatus } from "@/components/ui"
 
 const Z = "0x0000000000000000000000000000000000000000" as Address
 
@@ -68,7 +68,7 @@ export default function PayPage({ params }: { params: { vault: string; id: strin
 
   return (
     <div className="mx-auto flex max-w-lg flex-col gap-5">
-      <h1 className="text-2xl font-bold">Pay an installment</h1>
+      <PageHead eyebrow="Payer" title="Pay an installment" />
       <Card className="flex flex-col gap-3 text-sm">
         <p className="text-ink-300">
           Pays <span className="num text-white">{fmtMusd(c.installment)} MUSD</span> straight to <Addr a={c.beneficiary} /> through the
@@ -80,9 +80,9 @@ export default function PayPage({ params }: { params: { vault: string; id: strin
           <p className="text-ok">All installments are settled.</p>
         ) : (
           <>
-            <div className="rounded-xl bg-ink-950 p-4">
+            <div className="rounded-[3px] bg-ink-950 p-4">
               <div className="text-xs uppercase text-ink-400">Next: installment {next + 1} of {c.count}</div>
-              <div className="num mt-1 text-2xl">{fmtMusd(c.installment)} MUSD</div>
+              <div className="display mt-1 text-5xl">{fmtMusd(c.installment)} <span className="font-mono text-sm text-ink-400">MUSD</span></div>
               <div className="mt-1 text-xs text-ink-400">
                 due {fmtDate(due)} · {now < due ? `in ${fmtDuration(due - now)}` : now < due + c.grace ? `late, vault pays in ${fmtDuration(due + c.grace - now)}` : "missed: the vault will cover it"}
               </div>
