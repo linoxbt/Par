@@ -6,14 +6,14 @@ import { Providers } from "./providers"
 import { Header, Logo } from "@/components/Header"
 
 const COLS: [string, [string, string][]][] = [
-  ["Product", [["Vault", "/vault"], ["Guarantees", "/vault/new-guarantee"], ["Circuit", "/circuit"]]],
-  ["Developers", [["Quickstart", "/developers"], ["Contracts", "/developers#contracts"], ["Keeper", "/developers#keeper"], ["GitHub", "https://github.com/linoxbt/par"]]],
-  ["Protocol", [["Security", "/security"], ["MUSD docs", "https://mezo.org/docs/developers/musd"], ["MUSD contracts", "https://github.com/mezo-org/musd"], ["Mezo", "https://mezo.org"]]],
+  ["Product", [["Vault", "/vault"], ["Guarantees", "/vault/new-guarantee"], ["Circuit", "/circuit"], ["Docs", "/docs"]]],
+  ["Developers", [["Quickstart", "/developers"], ["Contracts", "/developers#contracts"], ["Security", "/security"], ["GitHub", "https://github.com/linoxbt/par"]]],
+  ["Legal", [["Terms of use", "/terms"], ["Privacy policy", "/privacy"], ["Cookie policy", "/cookies"], ["MUSD docs", "https://mezo.org/docs/developers/musd"]]],
 ]
 
 function Footer() {
   return (
-    <footer className="mt-10 overflow-hidden border-t border-line bg-white">
+    <footer className="overflow-hidden border-t border-line bg-white">
       <div className="mx-auto grid max-w-6xl grid-cols-2 gap-x-6 gap-y-10 px-5 pb-10 pt-14 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div className="col-span-2 md:col-span-1">
           <Logo />
@@ -49,7 +49,7 @@ function Footer() {
   )
 }
 
-const FULL = ["/", "/developers", "/security"]
+const FULL = ["/", "/developers", "/security", "/docs", "/terms", "/privacy", "/cookies"]
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname()
@@ -58,7 +58,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen flex-col">
         <Header />
         {FULL.includes(path) ? <main className="flex-1">{children}</main> : <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-5 sm:py-12">{children}</main>}
-        <Footer />
+        {path === "/" && <Footer />}
       </div>
     </Providers>
   )

@@ -79,12 +79,13 @@ function ProductsMenu() {
   )
 }
 
-const MARKETING = ["/", "/developers", "/security"]
+const MARKETING = ["/", "/developers", "/security", "/docs", "/terms", "/privacy", "/cookies"]
 
 const MOBILE_LINKS: [string, string][] = [
   ["/vault", "Vault"],
   ["/vault/new-guarantee", "Guarantees"],
   ["/circuit", "Circuit"],
+  ["/docs", "Docs"],
   ["/developers", "Developers"],
   ["/security", "Security"],
 ]
@@ -118,7 +119,7 @@ export function Header() {
           </Link>
           <nav className="hidden items-center md:flex">
             <ProductsMenu />
-            {link("/circuit", "Circuit")}
+            {link("/docs", "Docs")}
             {link("/developers", "Developers")}
             {link("/security", "Security")}
           </nav>

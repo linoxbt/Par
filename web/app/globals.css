@@ -37,3 +37,38 @@ body {
     background-size: 18px 18px;
   }
 }
+
+/* long-form documents (docs, legal) */
+.doc p {
+  @apply my-4 text-[15.5px] leading-[1.75] text-fg/80;
+}
+.doc ul {
+  @apply my-4 list-disc space-y-2 pl-5 text-[15.5px] leading-[1.7] text-fg/80 marker:text-subtle;
+}
+.doc ol.num-list {
+  @apply my-4 list-decimal space-y-2 pl-5 text-[15.5px] leading-[1.7] text-fg/80;
+}
+.doc h3 {
+  @apply mb-2 mt-8 text-lg font-semibold tracking-tight;
+}
+.doc a:not(.group):not(.btn) {
+  @apply font-medium text-fg underline decoration-line-strong underline-offset-4 hover:decoration-btc;
+}
+.doc code {
+  @apply rounded-md bg-soft px-1.5 py-0.5 font-mono text-[13px];
+}
+.doc strong {
+  @apply font-semibold text-fg;
+}
+.doc table {
+  @apply my-6 block w-full overflow-x-auto text-left text-sm;
+}
+.doc td code {
+  word-break: break-all;
+}
+.doc th {
+  @apply border-b border-line py-2.5 pr-4 font-medium text-muted;
+}
+.doc td {
+  @apply border-b border-line py-2.5 pr-4 align-top text-fg/80;
+}
