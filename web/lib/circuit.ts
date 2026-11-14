@@ -1,12 +1,13 @@
 "use client"
 
-import { useMemo } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { type Address } from "viem"
-import { useReadContract, useReadContracts } from "wagmi"
+import { usePublicClient, useReadContract, useReadContracts } from "wagmi"
 import { parCircuitAbi } from "./abi"
 import { CIRCUIT } from "./config"
 
 const C = { address: CIRCUIT, abi: parCircuitAbi } as const
+const ZERO = "0x0000000000000000000000000000000000000000" as Address
 
 export type Invoice = {
   id: bigint
@@ -45,54 +46,88 @@ export function useCircles() {
   }
 }
 
+/**
+ * Invoices for one circle. Incremental: settled invoices (accepted/rejected) are immutable, so only
+ * new ids and still-pending ones are re-read on each poll (not every invoice ever created).
+ */
+const invCache = new Map<number, Invoice>()
+let invNext = 0
+
 export function useInvoices(circleId: bigint) {
-  const { data: n, refetch: rn } = useReadContract({ ...C, functionName: "nextInvoiceId", query: { refetchInterval: 6_000 } })
-  const count = Number(n ?? 0n)
-  const { data, refetch } = useReadContracts({
-    contracts: Array.from({ length: count }, (_, i) => ({ ...C, functionName: "invoices" as const, args: [BigInt(i)] as const })),
-    allowFailure: false,
-    query: { enabled: count > 0, refetchInterval: 6_000 },
-  })
-  const invoices = useMemo(
-    () =>
-      ((data ?? []) as readonly (readonly [bigint, Address, Address, bigint, bigint, number, `0x${string}`])[])
-        .map((r, i) => ({ id: BigInt(i), circleId: r[0], creditor: r[1], debtor: r[2], amount: r[3], cycle: r[4], status: r[5], ref: r[6] }) as Invoice)
-        .filter((x) => x.circleId === circleId),
-    [data, circleId],
-  )
+  const pc = usePublicClient()
+  const [tick, setTick] = useState(0)
+  const [all, setAll] = useState<Invoice[]>(() => [...invCache.values()])
+  const load = useCallback(async () => {
+    if (!pc) return
+    try {
+      const n = Number(await pc.readContract({ ...C, functionName: "nextInvoiceId" }))
+      const ids: number[] = []
+      for (const [id, inv] of invCache) if (inv.status === 1) ids.push(id)
+      for (let i = invNext; i < n; i++) ids.push(i)
+      for (let k = 0; k < ids.length; k += 200) {
+        const batch = ids.slice(k, k + 200)
+        const calls = batch.map((id) => ({ ...C, functionName: "invoices" as const, args: [BigInt(id)] as const }))
+        // local hardhat has no Multicall3: fall back to plain reads
+        const res = pc.chain?.contracts?.multicall3
+          ? await pc.multicall({ contracts: calls, allowFailure: false })
+          : await Promise.all(calls.map((c) => pc.readContract(c)))
+        res.forEach((r: any, j: number) => {
+          const id = batch[j]
+          invCache.set(id, { id: BigInt(id), circleId: r[0], creditor: r[1], debtor: r[2], amount: r[3], cycle: r[4], status: Number(r[5]), ref: r[6] })
+        })
+      }
+      invNext = Math.max(invNext, n)
+      setAll([...invCache.values()])
+    } catch {
+      /* keep the last good snapshot; next poll retries */
+    }
+  }, [pc])
+  useEffect(() => {
+    load()
+    const t = setInterval(load, 6_000)
+    return () => clearInterval(t)
+  }, [load, tick])
+  const invoices = useMemo(() => all.filter((x) => x.circleId === circleId).sort((x, y) => Number(x.id - y.id)), [all, circleId])
   return {
     invoices,
     refetch: async () => {
-      await rn()
-      await refetch()
+      await load()
+      setTick((x) => x + 1)
     },
   }
 }
 
-export function useCircle(circleId: bigint, cycle: bigint | undefined) {
+export function useCircle(circleId: bigint, cycle: bigint | undefined, me?: Address) {
+  // 1) the circle itself. currentCycle divides by cycleLength, so it is only read once the circle exists.
+  const head = useReadContract({ ...C, functionName: "circles", args: [circleId], query: { refetchInterval: 15_000 } })
+  const circle = head.data as readonly [Address, bigint, bigint, bigint, boolean] | undefined
+  const exists = !!circle?.[4]
   const base = useReadContracts({
     contracts: [
-      { ...C, functionName: "circles", args: [circleId] },
       { ...C, functionName: "members_", args: [circleId] },
       { ...C, functionName: "currentCycle", args: [circleId] },
+      { ...C, functionName: "invites", args: [circleId, me ?? ZERO] },
     ],
     allowFailure: false,
-    query: { refetchInterval: 6_000 },
+    query: { enabled: exists, refetchInterval: 6_000 },
   })
-  const circle = base.data?.[0]
-  const members = (base.data?.[1] ?? []) as Address[]
-  const current = base.data?.[2] as bigint | undefined
+  const members = (base.data?.[0] ?? []) as Address[]
+  const current = base.data?.[1] as bigint | undefined
+  const invite = base.data?.[2] as readonly [Address, bigint, boolean] | undefined
   const cyc = cycle ?? current ?? 0n
 
+  const K = 6
   const perMember = useReadContracts({
     contracts: members.flatMap((m) => [
       { ...C, functionName: "net" as const, args: [circleId, cyc, m] as const },
       { ...C, functionName: "settled" as const, args: [circleId, cyc, m] as const },
       { ...C, functionName: "creditLimit" as const, args: [circleId, m] as const },
       { ...C, functionName: "members" as const, args: [circleId, m] as const },
+      { ...C, functionName: "claimed" as const, args: [circleId, cyc, m] as const },
+      { ...C, functionName: "lineHeadroom" as const, args: [circleId, m] as const },
     ]),
-    allowFailure: false,
-    query: { enabled: members.length > 0, refetchInterval: 6_000 },
+    allowFailure: true,
+    query: { enabled: exists && members.length > 0, refetchInterval: 6_000 },
   })
   const totals = useReadContracts({
     contracts: [
@@ -101,38 +136,51 @@ export function useCircle(circleId: bigint, cycle: bigint | undefined) {
       { ...C, functionName: "collected", args: [circleId, cyc] },
       { ...C, functionName: "nettingEfficiencyBps", args: [circleId, cyc] },
       { ...C, functionName: "cycleClose", args: [circleId, cyc] },
+      { ...C, functionName: "finalAt", args: [circleId, cyc] },
+      { ...C, functionName: "finalized", args: [circleId, cyc] },
     ],
     allowFailure: false,
-    query: { enabled: !!circle, refetchInterval: 6_000 },
+    query: { enabled: exists, refetchInterval: 6_000 },
   })
 
-  const rows = members.map((m, i) => {
-    const d = perMember.data
-    const mem = d?.[i * 4 + 3] as readonly [Address, bigint, boolean] | undefined
-    return {
-      member: m,
-      net: (d?.[i * 4] as bigint | undefined) ?? 0n,
-      settled: (d?.[i * 4 + 1] as boolean | undefined) ?? false,
-      limit: (d?.[i * 4 + 2] as bigint | undefined) ?? 0n,
-      vault: mem?.[0],
-      lineId: mem?.[1],
-    }
-  })
+  const rows = members
+    .map((m, i) => {
+      const d = perMember.data
+      const r = <T,>(j: number) => d?.[i * K + j]?.result as T | undefined
+      const mem = r<readonly [Address, bigint, boolean]>(3)
+      return {
+        member: m,
+        net: r<bigint>(0) ?? 0n,
+        settled: r<boolean>(1) ?? false,
+        limit: r<bigint>(2) ?? 0n,
+        vault: mem?.[0],
+        lineId: mem?.[1],
+        active: mem?.[2] ?? true,
+        claimed: r<bigint>(4) ?? 0n,
+        headroom: r<bigint>(5) ?? 0n,
+      }
+    })
+    // removed members stay listed onchain; hide them unless they still have a position in this cycle
+    .filter((r) => r.active || r.net !== 0n)
   const t = totals.data
   return {
-    circle: circle
-      ? { admin: circle[0], genesis: circle[1], cycleLength: circle[2], settleWindow: circle[3], exists: circle[4] }
-      : undefined,
+    loading: head.isLoading,
+    error: head.error,
+    circle: circle ? { admin: circle[0], genesis: circle[1], cycleLength: circle[2], settleWindow: circle[3], exists: circle[4] } : undefined,
     members,
     current,
     cycle: cyc,
     rows,
+    invite: invite && invite[2] ? { vault: invite[0], lineId: invite[1] } : undefined,
     gross: (t?.[0] as bigint | undefined) ?? 0n,
     totalOwed: (t?.[1] as bigint | undefined) ?? 0n,
     collected: (t?.[2] as bigint | undefined) ?? 0n,
     efficiencyBps: (t?.[3] as bigint | undefined) ?? 0n,
     close: (t?.[4] as bigint | undefined) ?? 0n,
+    finalAt: (t?.[5] as bigint | undefined) ?? 0n,
+    finalized: (t?.[6] as boolean | undefined) ?? false,
     refetch: async () => {
+      await head.refetch()
       await base.refetch()
       await perMember.refetch()
       await totals.refetch()

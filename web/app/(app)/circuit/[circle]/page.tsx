@@ -8,17 +8,28 @@ import { parCircuitAbi } from "@/lib/abi"
 import { CIRCUIT } from "@/lib/config"
 import { cancellationFrames, useCircle, useInvoices, type Edge } from "@/lib/circuit"
 import { erc20Abi } from "@/lib/mezoAbi"
-import { fmtBps, fmtDuration, fmtMusd, short, toNum } from "@/lib/format"
+import { fmtBps, fmtDate, fmtDuration, fmtMusd, parseId, parseIntSafe, short, toNum } from "@/lib/format"
 import { useChainNow, useMe, useProtocol, useTx } from "@/lib/hooks"
 import { CircuitGraph, useTween } from "@/components/CircuitGraph"
-import { Addr, Badge, Button, Card, CardTitle, Field, LinkButton, Meter, Stat, TxStatus, inputCls } from "@/components/ui"
+import { Addr, Badge, Button, Card, CardTitle, Field, LinkButton, Meter, Problem, Stat, TxStatus, inputCls } from "@/components/ui"
 
 const Z = "0x0000000000000000000000000000000000000000" as Address
-const NAMES = ["Importer", "Wholesaler", "Repairer", "Shop D", "Shop E", "Shop F", "Shop G", "Shop H"]
+/** Members are labelled by join order (names aren't stored onchain); the address is always shown too. */
+const label = (i: number) => `Member ${String.fromCharCode(65 + (i % 26))}`
 const n0 = (x: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(x)
 
-export default function CircleBoard({ params }: { params: { circle: string } }) {
-  const circleId = BigInt(params.circle)
+export default function CircleBoardPage({ params }: { params: { circle: string } }) {
+  const circleId = parseId(params.circle)
+  if (circleId === undefined)
+    return (
+      <Problem title="This isn't a valid circle link" action={{ href: "/circuit", label: "All circles" }}>
+        Circle links look like /circuit/&lt;number&gt;.
+      </Problem>
+    )
+  return <CircleBoard circleId={circleId} />
+}
+
+function CircleBoard({ circleId }: { circleId: bigint }) {
   const { invoices, refetch: refetchInv } = useInvoices(circleId)
   const [picked, setPicked] = useState<bigint>()
   const now = useChainNow()
@@ -26,14 +37,14 @@ export default function CircleBoard({ params }: { params: { circle: string } }) 
   // Default to the latest cycle that has accepted invoices (so a closed cycle stays in view for settlement).
   const activeCycles = useMemo(() => [...new Set(invoices.filter((i) => i.status === 2).map((i) => i.cycle))].sort((a, b) => Number(a - b)), [invoices])
   const latestActive = activeCycles[activeCycles.length - 1]
-  const s = useCircle(circleId, picked ?? latestActive)
   const { me } = useMe()
+  const s = useCircle(circleId, picked ?? latestActive, me)
 
   const nodes = useMemo(
     () =>
       s.rows.map((r, i) => ({
         id: r.member.toLowerCase(),
-        label: NAMES[i] ?? short(r.member),
+        label: label(i),
         sub: `${toNum(r.net) >= 0 ? "+" : ""}${n0(toNum(r.net))}`,
         net: toNum(r.net),
       })),
@@ -51,9 +62,11 @@ export default function CircleBoard({ params }: { params: { circle: string } }) 
         if (e) e.amount += toNum(i.amount)
         else m.set(`${from}->${to}`, { from, to, amount: toNum(i.amount) })
       }
-      return [...m.values()]
+      // invoices can load before the member list: only draw edges between known nodes
+      const known = new Set(nodes.map((n) => n.id))
+      return [...m.values()].filter((e) => known.has(e.from) && known.has(e.to))
     },
-    [invoices, s.cycle],
+    [invoices, s.cycle, nodes],
   )
 
   // ---- clear animation
@@ -88,8 +101,20 @@ export default function CircleBoard({ params }: { params: { circle: string } }) 
     refetchInv()
   }
 
+  if (s.error && !s.circle)
+    return (
+      <Problem title="Couldn't load this circle" action={{ href: "/circuit", label: "All circles" }}>
+        The network didn&apos;t answer. Check your connection and reload.
+      </Problem>
+    )
   if (!s.circle) return <Card>Loading circle…</Card>
-  if (!s.circle.exists) return <Card>No such circle.</Card>
+  if (!s.circle.exists)
+    return (
+      <Problem title={`Circle #${String(circleId)} doesn't exist`} action={{ href: "/circuit", label: "All circles" }}>
+        No circle with this number has been created on this network.
+      </Problem>
+    )
+  const final = now >= Number(s.finalAt)
 
   return (
     <div className="flex flex-col gap-6">
@@ -178,6 +203,11 @@ export default function CircleBoard({ params }: { params: { circle: string } }) 
                 <span className="num text-4xl font-medium tracking-tight text-warn">{fmtDuration(windowEnd - now)}</span>
                 <span className="text-xs text-muted">After that, anyone can force-settle a debtor from their vault.</span>
               </>
+            ) : s.collected < s.totalOwed && final ? (
+              <>
+                <span className="text-muted">Cycle finalised</span>
+                <span className="text-lg text-warn">Some debt is still unpaid. Creditors can claim their share now and again if late payments arrive.</span>
+              </>
             ) : s.collected >= s.totalOwed ? (
               <>
                 <span className="text-muted">Cycle settled</span>
@@ -190,13 +220,33 @@ export default function CircleBoard({ params }: { params: { circle: string } }) 
               </>
             )}
           </Card>
-          {meRow && <MyPosition circleId={circleId} cycle={s.cycle} row={meRow} closed={closed} canClaim={s.collected >= s.totalOwed} onDone={refreshAll} />}
+          {s.invite && <JoinCard circleId={circleId} invite={s.invite} onDone={refreshAll} />}
+          {meRow && (
+            <MyPosition
+              circleId={circleId}
+              cycle={s.cycle}
+              row={meRow}
+              closed={closed}
+              full={s.collected >= s.totalOwed}
+              final={final}
+              finalAt={s.finalAt}
+              collected={s.collected}
+              totalOwed={s.totalOwed}
+              onDone={refreshAll}
+            />
+          )}
         </div>
       </div>
 
       <Card>
         <CardTitle>Members</CardTitle>
-        <div className="overflow-x-auto">
+        {/* phones: one card per member so Net / Status / Force-settle are never off-screen */}
+        <div className="flex flex-col gap-3 sm:hidden">
+          {s.rows.map((r, i) => (
+            <MemberCard key={r.member} i={i} r={r} circleId={circleId} cycle={s.cycle} forceable={closed && forceable} isAdmin={!!isAdmin} onDone={refreshAll} />
+          ))}
+        </div>
+        <div className="hidden overflow-x-auto sm:block">
           <table className="w-full min-w-[620px] text-sm">
             <thead className="text-left text-xs font-medium text-muted">
               <tr>
@@ -210,7 +260,7 @@ export default function CircleBoard({ params }: { params: { circle: string } }) 
             </thead>
             <tbody>
               {s.rows.map((r, i) => (
-                <MemberRow key={r.member} i={i} r={r} circleId={circleId} cycle={s.cycle} forceable={closed && forceable} onDone={refreshAll} />
+                <MemberRow key={r.member} i={i} r={r} circleId={circleId} cycle={s.cycle} forceable={closed && forceable} isAdmin={!!isAdmin} onDone={refreshAll} />
               ))}
             </tbody>
           </table>
@@ -222,13 +272,28 @@ export default function CircleBoard({ params }: { params: { circle: string } }) 
   )
 }
 
-function MemberRow({ i, r, circleId, cycle, forceable, onDone }: { i: number; r: any; circleId: bigint; cycle: bigint; forceable: boolean; onDone: () => void }) {
+function status(r: any) {
+  const net = r.net as bigint
+  if (!r.active) return <Badge tone="muted">Removed</Badge>
+  if (net < 0n) return r.settled ? <Badge tone="ok">Paid</Badge> : <Badge tone="warn">Owes</Badge>
+  if (net > 0n) return r.settled ? <Badge tone="ok">Claimed</Badge> : r.claimed > 0n ? <Badge tone="btc">Partly claimed</Badge> : <Badge tone="btc">Receives</Badge>
+  return <Badge tone="muted">Even</Badge>
+}
+
+function useMemberActions(circleId: bigint, cycle: bigint, r: any, onDone: () => void) {
   const t = useTx(onDone)
+  const force = () => t.send({ address: CIRCUIT, abi: parCircuitAbi, functionName: "forceSettle", args: [circleId, cycle, r.member, Z, Z] })
+  const remove = () => t.send({ address: CIRCUIT, abi: parCircuitAbi, functionName: "removeMember", args: [circleId, r.member] })
+  return { t, force, remove }
+}
+
+function MemberRow({ i, r, circleId, cycle, forceable, isAdmin, onDone }: { i: number; r: any; circleId: bigint; cycle: bigint; forceable: boolean; isAdmin: boolean; onDone: () => void }) {
+  const { t, force, remove } = useMemberActions(circleId, cycle, r, onDone)
   const net = r.net as bigint
   return (
     <tr className="border-t border-line">
       <td className="py-2.5">
-        <div className="font-semibold">{NAMES[i] ?? "Member"}</div>
+        <div className="font-semibold">{label(i)}</div>
         <Addr a={r.member} />
       </td>
       <td>
@@ -239,26 +304,116 @@ function MemberRow({ i, r, circleId, cycle, forceable, onDone }: { i: number; r:
         {net > 0n ? "+" : ""}
         {fmtMusd(net, 0)}
       </td>
-      <td>
-        {net < 0n ? r.settled ? <Badge tone="ok">Paid</Badge> : <Badge tone="warn">Owes</Badge> : net > 0n ? r.settled ? <Badge tone="ok">Claimed</Badge> : <Badge tone="btc">Receives</Badge> : <Badge tone="muted">Even</Badge>}
-      </td>
+      <td>{status(r)}</td>
       <td className="text-right">
-        {net < 0n && !r.settled && forceable && (
-          <Button
-            variant="danger"
-            busy={t.busy}
-            onClick={() => t.send({ address: CIRCUIT, abi: parCircuitAbi, functionName: "forceSettle", args: [circleId, cycle, r.member, Z, Z] })}
-          >
-            Force-settle
-          </Button>
-        )}
+        <div className="flex justify-end gap-2">
+          {net < 0n && !r.settled && forceable && (
+            <Button variant="danger" size="sm" busy={t.busy} onClick={force}>
+              Force-settle
+            </Button>
+          )}
+          {isAdmin && r.active && net === 0n && (
+            <Button variant="ghost" size="sm" busy={t.busy} onClick={remove}>
+              Remove
+            </Button>
+          )}
+        </div>
         <TxStatus tx={t} />
       </td>
     </tr>
   )
 }
 
-function MyPosition({ circleId, cycle, row, closed, canClaim, onDone }: { circleId: bigint; cycle: bigint; row: any; closed: boolean; canClaim: boolean; onDone: () => void }) {
+function MemberCard({ i, r, circleId, cycle, forceable, isAdmin, onDone }: { i: number; r: any; circleId: bigint; cycle: bigint; forceable: boolean; isAdmin: boolean; onDone: () => void }) {
+  const { t, force, remove } = useMemberActions(circleId, cycle, r, onDone)
+  const net = r.net as bigint
+  return (
+    <div className="rounded-xl border border-line p-3 text-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="font-semibold">{label(i)}</div>
+          <Addr a={r.member} />
+        </div>
+        {status(r)}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <div>
+          <div className="text-xs text-muted">Net this cycle</div>
+          <div className={`num text-lg ${net < 0n ? "text-bad" : net > 0n ? "text-ok" : ""}`}>
+            {net > 0n ? "+" : ""}
+            {fmtMusd(net, 0)}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-muted">Line available</div>
+          <div className="num text-lg">{fmtMusd(r.limit, 0)}</div>
+        </div>
+      </div>
+      <div className="mt-2 text-xs text-muted">
+        Vault <Addr a={r.vault} /> · line #{String(r.lineId ?? "")}
+      </div>
+      {(net < 0n && !r.settled && forceable) || (isAdmin && r.active && net === 0n) ? (
+        <div className="mt-3 flex gap-2">
+          {net < 0n && !r.settled && forceable && (
+            <Button variant="danger" busy={t.busy} onClick={force} className="flex-1">
+              Force-settle
+            </Button>
+          )}
+          {isAdmin && r.active && net === 0n && (
+            <Button variant="ghost" busy={t.busy} onClick={remove} className="flex-1">
+              Remove
+            </Button>
+          )}
+        </div>
+      ) : null}
+      <TxStatus tx={t} />
+    </div>
+  )
+}
+
+/** The admin invited you: joining pledges the named clearing line to this circle. */
+function JoinCard({ circleId, invite, onDone }: { circleId: bigint; invite: { vault: Address; lineId: bigint }; onDone: () => void }) {
+  const t = useTx(onDone)
+  return (
+    <Card className="flex flex-col gap-3 border-btc-line bg-btc-wash text-sm">
+      <div className="label">You&apos;re invited</div>
+      <p className="text-fg/80">
+        The admin invited you to join with clearing line #{String(invite.lineId)} of vault <Addr a={invite.vault} />. Joining lets members bill you; at each cycle end
+        you settle your net, or it is drawn from that line.
+      </p>
+      <div>
+        <Button busy={t.busy} onClick={() => t.send({ address: CIRCUIT, abi: parCircuitAbi, functionName: "join", args: [circleId, invite.vault, invite.lineId] })}>
+          Join circle
+        </Button>
+      </div>
+      <TxStatus tx={t} />
+    </Card>
+  )
+}
+
+function MyPosition({
+  circleId,
+  cycle,
+  row,
+  closed,
+  full,
+  final,
+  finalAt,
+  collected,
+  totalOwed,
+  onDone,
+}: {
+  circleId: bigint
+  cycle: bigint
+  row: any
+  closed: boolean
+  full: boolean
+  final: boolean
+  finalAt: bigint
+  collected: bigint
+  totalOwed: bigint
+  onDone: () => void
+}) {
   const { me } = useMe()
   const p = useProtocol()
   const net = row.net as bigint
@@ -302,15 +457,20 @@ function MyPosition({ circleId, cycle, row, closed, canClaim, onDone }: { circle
           </div>
         </>
       )}
-      {net > 0n && !row.settled && (
-        <Button
-          busy={t.busy}
-          disabled={!closed || !canClaim}
-          onClick={() => t.send({ address: CIRCUIT, abi: parCircuitAbi, functionName: "claim", args: [circleId, cycle] })}
-        >
-          {canClaim ? `Claim ${fmtMusd(net, 0)} MUSD` : "Claim (waiting for debtors)"}
-        </Button>
-      )}
+      {net > 0n && !row.settled && (() => {
+        // Full claim once every debtor paid. If some never do, the cycle finalises at finalAt and
+        // creditors claim pro rata (credit × collected / owed), topping up if late payments arrive.
+        const entitled = full ? net : final && totalOwed > 0n ? (net * collected) / totalOwed : 0n
+        const due = entitled > row.claimed ? entitled - row.claimed : 0n
+        return (
+          <>
+            {row.claimed > 0n && <p className="text-xs text-muted">Claimed so far: {fmtMusd(row.claimed)} MUSD</p>}
+            <Button busy={t.busy} disabled={!closed || due === 0n} onClick={() => t.send({ address: CIRCUIT, abi: parCircuitAbi, functionName: "claim", args: [circleId, cycle] })}>
+              {due > 0n ? `Claim ${fmtMusd(due, 0)} MUSD${full ? "" : " (pro rata)"}` : full ? "Claim" : `Claim (waiting for debtors${final ? "" : ` · pro rata from ${fmtDate(finalAt)}`})`}
+            </Button>
+          </>
+        )
+      })()}
       {row.settled && <Badge tone="ok">Done for this cycle</Badge>}
       <TxStatus tx={tA} />
       <TxStatus tx={t} />
@@ -322,30 +482,35 @@ function AddMember({ circleId, onDone }: { circleId: bigint; onDone: () => void 
   const [member, setMember] = useState("")
   const [vault, setVault] = useState("")
   const [line, setLine] = useState("0")
-  const t = useTx(onDone)
+  const lineN = parseIntSafe(line, { min: 0, max: 1_000_000 })
+  const t = useTx(() => {
+    setMember("")
+    setVault("")
+    onDone()
+  })
   return (
     <Card className="flex flex-col gap-3">
-      <CardTitle sub="The member must own the vault, and the vault must hold an active clearing line pointed at Par Circuit.">Add a member</CardTitle>
+      <CardTitle sub="Invites are consent-based: the member then joins from this page. Their vault must hold an active clearing line pointed at Par Circuit that outlasts this cycle's settle window, and a line can back only one circle.">
+        Invite a member
+      </CardTitle>
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Member address">
           <input className={inputCls} value={member} onChange={(e) => setMember(e.target.value)} placeholder="0x…" />
         </Field>
-        <Field label="Vault">
+        <Field label="Their vault">
           <input className={inputCls} value={vault} onChange={(e) => setVault(e.target.value)} placeholder="0x…" />
         </Field>
-        <Field label="Line id">
-          <input className={inputCls} value={line} onChange={(e) => setLine(e.target.value)} />
+        <Field label="Line number">
+          <input className={inputCls} inputMode="numeric" value={line} onChange={(e) => setLine(e.target.value)} />
         </Field>
       </div>
       <div>
         <Button
           busy={t.busy}
-          disabled={!isAddress(member) || !isAddress(vault)}
-          onClick={() =>
-            t.send({ address: CIRCUIT, abi: parCircuitAbi, functionName: "addMember", args: [circleId, member as Address, vault as Address, BigInt(line || "0")] })
-          }
+          disabled={!isAddress(member) || !isAddress(vault) || lineN === undefined}
+          onClick={() => t.send({ address: CIRCUIT, abi: parCircuitAbi, functionName: "addMember", args: [circleId, member as Address, vault as Address, BigInt(lineN!)] })}
         >
-          Add member
+          Send invite
         </Button>
       </div>
       <TxStatus tx={t} />

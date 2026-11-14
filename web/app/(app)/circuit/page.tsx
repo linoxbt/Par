@@ -14,7 +14,7 @@ import { Addr, Button, Card, CardTitle, Empty, Field, NotDeployed, PageHead, TxS
 const PRESETS = [
   { label: "Weekly (2-day settle)", cycle: 7 * 86400, window: 2 * 86400 },
   { label: "Monthly (5-day settle)", cycle: 30 * 86400, window: 5 * 86400 },
-  { label: "Demo (3 min, 1-min settle)", cycle: 180, window: 60 },
+  { label: "Demo (10 min, 1-min settle)", cycle: 600, window: 60 },
 ]
 
 export default function CircuitHome() {

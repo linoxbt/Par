@@ -1,56 +1,71 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { MONO, useInView, useReducedMotion } from "./motion"
 
+// Snippets use viem against the ABIs in web/lib/abi.ts (exported from the contracts).
+// `walletClient` / `publicClient` are viem clients; `vault` and `circuit` are contract addresses.
 const CODE = {
   Guarantee: `import { parseEther } from "viem"
 import { parVaultAbi } from "./abi"
 
 // Rent: 12 × 500 MUSD, cover 1,500, 3-day grace
-const hash = await wallet.writeContract({
+// start, expiry: unix seconds (bigint); MONTH, DAY: seconds
+const hash = await walletClient.writeContract({
   address: vault,
   abi: parVaultAbi,
   functionName: "createScheduled",
   args: [landlord, tenant, parseEther("500"), start,
          MONTH, 3 * DAY, 12, parseEther("1500"), expiry],
 })
-
 // reverts with Unhealthy() unless it survives BTC −40%
-const [ok, stressedIcr] = await vault.read.health([0n])`,
-  Circuit: `import { parCircuitAbi } from "./abi"
 
-// creditor logs an invoice, debtor accepts: nets update in O(1)
-await circuit.write.createInvoice([circle, debtor, parseEther("1000"), ref])
-await circuit.write.acceptInvoice([invoiceId])
+const [ok, stressedIcr, headroom] = await publicClient.readContract({
+  address: vault,
+  abi: parVaultAbi,
+  functionName: "health",
+  args: [0n],
+})`,
+  Circuit: `import { parseEther, keccak256, toHex } from "viem"
+import { parCircuitAbi } from "./abi"
 
-// after cycle close + settle window, anyone can call this.
-// It draws the debtor's clearing line in their own vault.
-await circuit.write.forceSettle([circle, cycle, debtor, up, lo])
+// creditor logs an invoice
+await walletClient.writeContract({
+  address: circuit,
+  abi: parCircuitAbi,
+  functionName: "createInvoice",
+  args: [circleId, debtor, parseEther("1000"), keccak256(toHex("INV-001"))],
+})
 
-await circuit.read.nettingEfficiencyBps([circle, cycle]) // 9655n`,
+// debtor accepts (from their wallet): nets update in O(1)
+await walletClient.writeContract({
+  address: circuit,
+  abi: parCircuitAbi,
+  functionName: "acceptInvoice",
+  args: [invoiceId],
+})
+
+const bps = await publicClient.readContract({
+  address: circuit,
+  abi: parCircuitAbi,
+  functionName: "nettingEfficiencyBps",
+  args: [circleId, cycle],
+})`,
 }
 
-const RESPONSE = {
-  Guarantee: `{
-  "event": "CommitmentCreated",
-  "id": 0,
-  "kind": "Scheduled",
-  "beneficiary": "0x2361…1E8f",
-  "cap": "1500.0",
-  "health": { "ok": true, "stressedIcr": "2.21" }
-}`,
-  Circuit: `{
-  "gross": "2900.0",
-  "totalOwed": "100.0",
-  "nettingEfficiencyBps": 9655,
-  "event": "Settled",
-  "debtor": "repairer",
-  "amount": "100.0",
-  "forced": true
-}`,
+// What the contract tests actually assert (contracts/test/Par.test.ts), with the tests' own numbers.
+const RESULT = {
+  Guarantee: `✓ rent guarantee: missed installment is paid from buffer,
+  then minted from the trove
+    Payout(id 0, landlord, 1500, fromBuffer 500, minted 1000)
+    trigger again → AlreadySettled · too early → TooEarly
+✓ rejects a commitment that would not survive the stress test
+    1 BTC at $50k, cap 20,000 → Unhealthy()`,
+  Circuit: `✓ Circuit: 2,900 MUSD of invoices settle with 100 MUSD
+    gross 2900 · totalOwed 100 · nettingEfficiencyBps 9655
+    over-limit invoice → OverLimit
+    forceSettle draws the defaulter's line · creditor claims 100`,
 }
-
-const KW = /\b(import|from|const|await|async|unless|true|false)\b/g
 
 function highlight(line: string) {
   const ci = line.indexOf("//")
@@ -73,8 +88,7 @@ function highlight(line: string) {
     last = m.index + t.length
   }
   if (last < code.length) parts.push(code.slice(last))
-  if (comment) parts.push(<span key="c" className="text-white/35">{comment}</span>)
-  void KW
+  if (comment) parts.push(<span key="c" className="text-white/55">{comment}</span>)
   return parts
 }
 
@@ -92,14 +106,14 @@ export function CodeCard() {
             </button>
           ))}
         </div>
-        <span className="flex items-center gap-1.5 font-mono text-[10px] text-white/40">
+        <span className="flex items-center gap-1.5 font-mono text-[10px] text-white/55">
           <span className="h-1.5 w-1.5 rounded-full bg-btc" /> MEZO · 31611
         </span>
       </div>
       <pre className="overflow-x-auto px-0 py-4 font-mono text-[12.5px] leading-[1.7]">
         {code.split("\n").map((l, i) => (
           <div key={i} className="flex">
-            <span className="w-10 shrink-0 select-none pr-4 text-right text-white/20">{i + 1}</span>
+            <span className="w-10 shrink-0 select-none pr-4 text-right text-white/30">{i + 1}</span>
             <span className="whitespace-pre pr-4 text-white/85">{highlight(l)}</span>
           </div>
         ))}
@@ -120,13 +134,11 @@ export function CodeCard() {
         </a>
       </div>
       <div className="border-t border-white/10 bg-black/40 px-4 py-3">
-        <div className="mb-2 flex items-center justify-between font-mono text-[10px] text-white/40">
-          <span>RESULT</span>
-          <span className="flex items-center gap-1.5 text-[#4ADE80]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#4ADE80]" /> tests passing
-          </span>
+        <div className="mb-2 flex items-center justify-between font-mono text-[10px] text-white/55">
+          <span>ASSERTED IN contracts/test/Par.test.ts</span>
+          <span className="text-white/50">test numbers</span>
         </div>
-        <pre className="overflow-x-auto font-mono text-[12px] leading-[1.6] text-white/75">{RESPONSE[tab]}</pre>
+        <pre className="overflow-x-auto font-mono text-[12px] leading-[1.6] text-white/75">{RESULT[tab]}</pre>
       </div>
     </div>
   )
@@ -152,9 +164,13 @@ export function CopyChip({ text }: { text: string }) {
   )
 }
 
-/** Falling glyphs behind the closing CTA. */
+/** Falling glyphs behind the closing CTA. Animates only on screen; one static frame under reduced motion. */
 export function GlyphRain() {
   const ref = useRef<HTMLCanvasElement>(null)
+  const reduce = useReducedMotion()
+  const inView = useInView(ref)
+  const drawRef = useRef<(dt: number) => void>()
+
   useEffect(() => {
     const c = ref.current!
     const ctx = c.getContext("2d")!
@@ -164,6 +180,22 @@ export function GlyphRain() {
     let cols: { y: number; v: number; ch: string[] }[] = []
     const glyphs = "₿0123456789$=parMUSD".split("")
     const size = 14
+    const pick = () => glyphs[Math.floor(Math.random() * glyphs.length)]
+    const draw = (dt: number) => {
+      ctx.clearRect(0, 0, w, h)
+      ctx.font = `${size}px ${MONO}`
+      cols.forEach((col, i) => {
+        col.y += col.v * dt
+        if (col.y > h + size * 6) col.y = -size * 6
+        col.ch.forEach((g, j) => {
+          const y = col.y - j * size * 1.4
+          const a = (1 - j / col.ch.length) * 0.55
+          ctx.fillStyle = j === 0 ? `rgba(247,147,26,${a})` : `rgba(10,10,11,${a * 0.35})`
+          ctx.fillText(g, i * 26 + 6, y)
+        })
+        if (dt > 0 && Math.random() < 0.01) col.ch[Math.floor(Math.random() * col.ch.length)] = pick()
+      })
+    }
     const resize = () => {
       const r = c.parentElement!.getBoundingClientRect()
       w = r.width
@@ -176,38 +208,32 @@ export function GlyphRain() {
       cols = Array.from({ length: Math.ceil(w / 26) }, () => ({
         y: Math.random() * h,
         v: 10 + Math.random() * 22,
-        ch: Array.from({ length: 6 }, () => glyphs[Math.floor(Math.random() * glyphs.length)]),
+        ch: Array.from({ length: 6 }, pick),
       }))
+      draw(0)
     }
+    drawRef.current = draw
     resize()
     const ro = new ResizeObserver(resize)
     ro.observe(c.parentElement!)
-    let last = performance.now()
-    let raf = 0
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    const draw = (now: number) => {
-      const dt = reduce ? 0 : (now - last) / 1000
-      last = now
-      ctx.clearRect(0, 0, w, h)
-      ctx.font = `${size}px ui-monospace, monospace`
-      cols.forEach((col, i) => {
-        col.y += col.v * dt
-        if (col.y > h + size * 6) col.y = -size * 6
-        col.ch.forEach((g, j) => {
-          const y = col.y - j * size * 1.4
-          const a = (1 - j / col.ch.length) * 0.55
-          ctx.fillStyle = j === 0 ? `rgba(247,147,26,${a})` : `rgba(10,10,11,${a * 0.35})`
-          ctx.fillText(g, i * 26 + 6, y)
-        })
-        if (Math.random() < 0.01) col.ch[Math.floor(Math.random() * col.ch.length)] = glyphs[Math.floor(Math.random() * glyphs.length)]
-      })
-      raf = requestAnimationFrame(draw)
-    }
-    raf = requestAnimationFrame(draw)
     return () => {
-      cancelAnimationFrame(raf)
       ro.disconnect()
+      drawRef.current = undefined
     }
   }, [])
+
+  useEffect(() => {
+    if (!inView || reduce) return
+    let raf = 0
+    let last = performance.now()
+    const frame = (now: number) => {
+      drawRef.current?.(Math.min(0.1, (now - last) / 1000))
+      last = now
+      raf = requestAnimationFrame(frame)
+    }
+    raf = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(raf)
+  }, [inView, reduce])
+
   return <canvas ref={ref} className="absolute inset-0 [mask-image:radial-gradient(ellipse_at_center,transparent_22%,black_70%)]" aria-hidden />
 }

@@ -1,10 +1,13 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useInView, useReducedMotion } from "./motion"
 
 /**
  * Hero visual: a dotted globe (Bitcoin on Mezo) with promises routed out of one vault.
  * Payout arcs travel from the vault to each beneficiary; a dot field below rises and falls like collateral.
+ * The animation only runs while the globe is on screen, and not at all under prefers-reduced-motion
+ * (one static frame is drawn instead).
  */
 const TARGETS = [
   { label: "LANDLORD", amount: "500", x: 0.78, y: 0.16, mx: 0.68, my: 0.06 },
@@ -13,64 +16,59 @@ const TARGETS = [
 ]
 const pos = (t: (typeof TARGETS)[number], narrow: boolean) => (narrow ? { x: t.mx, y: t.my } : { x: t.x, y: t.y })
 
+// sphere points on a lat/lon lattice (computed once)
+const PTS: [number, number, number][] = []
+for (let lat = -78; lat <= 78; lat += 6) {
+  const step = 6 / Math.max(0.25, Math.cos((lat * Math.PI) / 180))
+  for (let lon = 0; lon < 360; lon += step) {
+    const la = (lat * Math.PI) / 180
+    const lo = (lon * Math.PI) / 180
+    PTS.push([Math.cos(la) * Math.cos(lo), Math.sin(la), Math.cos(la) * Math.sin(lo)])
+  }
+}
+
 export function GlobeViz() {
   const wrap = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
+  const reduce = useReducedMotion()
+  const inView = useInView(wrap)
+  const animate = inView && !reduce
   const [active, setActive] = useState(0)
   const activeRef = useRef(0)
   activeRef.current = active
   const [narrow, setNarrow] = useState(false)
   const narrowRef = useRef(false)
   narrowRef.current = narrow
+  /** Draws one frame at time t (seconds). Set up once the canvas is sized. */
+  const drawRef = useRef<(t: number) => void>()
+  const tRef = useRef(0)
 
+  // rotate the highlighted beneficiary, only while visible and motion is allowed
   useEffect(() => {
+    if (!animate) return
     const t = setInterval(() => setActive((a) => (a + 1) % TARGETS.length), 2600)
     return () => clearInterval(t)
-  }, [])
+  }, [animate])
 
+  // canvas setup + drawing function
   useEffect(() => {
     const c = canvas.current!
     const ctx = c.getContext("2d")!
-    let raf = 0
     let w = 0
     let h = 0
     const dpr = Math.min(2, window.devicePixelRatio || 1)
-    const resize = () => {
-      const r = wrap.current!.getBoundingClientRect()
-      w = r.width
-      h = r.height
-      c.width = w * dpr
-      c.height = h * dpr
-      c.style.width = `${w}px`
-      c.style.height = `${h}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      setNarrow(w < 560)
-    }
-    resize()
-    const ro = new ResizeObserver(resize)
-    ro.observe(wrap.current!)
 
-    // sphere points on a lat/lon lattice
-    const pts: [number, number, number][] = []
-    for (let lat = -78; lat <= 78; lat += 6) {
-      const step = 6 / Math.max(0.25, Math.cos((lat * Math.PI) / 180))
-      for (let lon = 0; lon < 360; lon += step) {
-        const la = (lat * Math.PI) / 180
-        const lo = (lon * Math.PI) / 180
-        pts.push([Math.cos(la) * Math.cos(lo), Math.sin(la), Math.cos(la) * Math.sin(lo)])
-      }
-    }
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    const t0 = performance.now()
-
-    const draw = (now: number) => {
-      const t = reduce ? 0 : (now - t0) / 1000
+    const draw = (t: number) => {
       ctx.clearRect(0, 0, w, h)
       const R = Math.min(w, h) * (w < 560 ? 0.38 : 0.34)
       const cx = w * 0.52
       const cy = h * 0.46
       const rot = t * 0.12
       const tilt = 0.38
+      const cr = Math.cos(rot)
+      const sr = Math.sin(rot)
+      const ct = Math.cos(tilt)
+      const st = Math.sin(tilt)
 
       // orbit ring
       ctx.strokeStyle = "rgba(10,10,11,0.08)"
@@ -79,24 +77,28 @@ export function GlobeViz() {
       ctx.ellipse(cx, cy, R * 1.45, R * 0.42, -0.12, 0, Math.PI * 2)
       ctx.stroke()
 
-      // globe
-      for (const [x0, y0, z0] of pts) {
-        const x1 = x0 * Math.cos(rot) - z0 * Math.sin(rot)
-        const z1 = x0 * Math.sin(rot) + z0 * Math.cos(rot)
-        const y2 = y0 * Math.cos(tilt) - z1 * Math.sin(tilt)
-        const z2 = y0 * Math.sin(tilt) + z1 * Math.cos(tilt)
-        const px = cx + x1 * R
-        const py = cy - y2 * R
-        if (z2 < 0) {
-          ctx.fillStyle = "rgba(10,10,11,0.06)"
-          ctx.fillRect(px, py, 1.2, 1.2)
-        } else {
-          const a = 0.18 + z2 * 0.62
-          ctx.fillStyle = `rgba(247,147,26,${a.toFixed(3)})`
-          const s = 1.2 + z2 * 1.3
-          ctx.fillRect(px - s / 2, py - s / 2, s, s)
-        }
+      // globe: back face in one batch, front face per point (alpha varies with depth)
+      ctx.fillStyle = "rgba(10,10,11,0.06)"
+      for (const [x0, y0, z0] of PTS) {
+        const z1 = x0 * sr + z0 * cr
+        const z2 = y0 * st + z1 * ct
+        if (z2 >= 0) continue
+        const x1 = x0 * cr - z0 * sr
+        const y2 = y0 * ct - z1 * st
+        ctx.fillRect(cx + x1 * R, cy - y2 * R, 1.2, 1.2)
       }
+      for (const [x0, y0, z0] of PTS) {
+        const z1 = x0 * sr + z0 * cr
+        const z2 = y0 * st + z1 * ct
+        if (z2 < 0) continue
+        const x1 = x0 * cr - z0 * sr
+        const y2 = y0 * ct - z1 * st
+        ctx.globalAlpha = 0.18 + z2 * 0.62
+        ctx.fillStyle = "#F7931A"
+        const s = 1.2 + z2 * 1.3
+        ctx.fillRect(cx + x1 * R - s / 2, cy - y2 * R - s / 2, s, s)
+      }
+      ctx.globalAlpha = 1
 
       // vault anchor (front of the globe)
       const vx = cx + R * 0.12
@@ -131,7 +133,7 @@ export function GlobeViz() {
         ctx.stroke()
         ctx.setLineDash([])
         if (on) {
-          const k = ((t * 0.55) % 1 + 1) % 1
+          const k = t === 0 ? 0.6 : (((t * 0.55) % 1) + 1) % 1
           const bx = (1 - k) * (1 - k) * vx + 2 * (1 - k) * k * mx + k * k * tx
           const by = (1 - k) * (1 - k) * vy + 2 * (1 - k) * k * my + k * k * ty
           ctx.fillStyle = "#F7931A"
@@ -149,19 +151,51 @@ export function GlobeViz() {
         const base = Math.max(0, 1 - d * 1.15)
         const n = Math.floor((Math.sin(i * 0.35 + t * 1.1) * 0.5 + 0.5) * 9 * base + base * 7)
         for (let j = 0; j < n; j++) {
-          const y = h - 8 - j * 6
           ctx.fillStyle = `rgba(247,147,26,${(0.08 + (j / 16) * 0.35 * base).toFixed(3)})`
-          ctx.fillRect(x, y, 2, 2)
+          ctx.fillRect(x, h - 8 - j * 6, 2, 2)
         }
       }
-      raf = requestAnimationFrame(draw)
     }
-    raf = requestAnimationFrame(draw)
+
+    const resize = () => {
+      const r = wrap.current!.getBoundingClientRect()
+      w = r.width
+      h = r.height
+      c.width = w * dpr
+      c.height = h * dpr
+      c.style.width = `${w}px`
+      c.style.height = `${h}px`
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      setNarrow(w < 560)
+      draw(tRef.current)
+    }
+    drawRef.current = draw
+    resize()
+    const ro = new ResizeObserver(resize)
+    ro.observe(wrap.current!)
     return () => {
-      cancelAnimationFrame(raf)
       ro.disconnect()
+      drawRef.current = undefined
     }
   }, [])
+
+  // animation loop: runs only while on screen and motion is allowed
+  useEffect(() => {
+    if (!animate) {
+      drawRef.current?.(tRef.current) // keep a correct static frame (e.g. after narrow/active changes)
+      return
+    }
+    let raf = 0
+    let last = performance.now()
+    const frame = (now: number) => {
+      tRef.current += Math.min(0.1, (now - last) / 1000)
+      last = now
+      drawRef.current?.(tRef.current)
+      raf = requestAnimationFrame(frame)
+    }
+    raf = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(raf)
+  }, [animate, narrow, active])
 
   return (
     <div ref={wrap} className="relative h-[380px] w-full sm:h-[520px]">
@@ -169,7 +203,7 @@ export function GlobeViz() {
       {TARGETS.map((tg, i) => (
         <div
           key={tg.label}
-          className={`absolute -translate-x-1/2 whitespace-nowrap rounded-md border px-2 py-1 font-mono text-[10px] tracking-wider transition ${
+          className={`absolute -translate-x-1/2 whitespace-nowrap rounded-md border px-2 py-1 font-mono text-[10px] tracking-wider motion-safe:transition ${
             i === active ? "border-fg bg-fg text-white" : "border-line bg-white text-muted"
           }`}
           style={{ left: `${pos(tg, narrow).x * 100}%`, top: `${pos(tg, narrow).y * 100}%` }}
@@ -177,15 +211,19 @@ export function GlobeViz() {
           {tg.label} <span className={i === active ? "text-btc" : ""}>{tg.amount}</span>
         </div>
       ))}
-      <PayingCard target={TARGETS[active]} />
+      <PayingCard target={TARGETS[active]} reduce={reduce} />
     </div>
   )
 }
 
-function PayingCard({ target }: { target: (typeof TARGETS)[number] }) {
-  const [n, setN] = useState(0)
+function PayingCard({ target, reduce }: { target: (typeof TARGETS)[number]; reduce: boolean }) {
   const amount = Number(target.amount.replace(",", ""))
+  const [n, setN] = useState(amount)
   useEffect(() => {
+    if (reduce) {
+      setN(amount)
+      return
+    }
     setN(0)
     const start = performance.now()
     let raf = 0
@@ -196,7 +234,7 @@ function PayingCard({ target }: { target: (typeof TARGETS)[number] }) {
     }
     raf = requestAnimationFrame(step)
     return () => cancelAnimationFrame(raf)
-  }, [amount])
+  }, [amount, reduce])
   const done = n >= amount - 0.01
   return (
     <div className="absolute bottom-4 left-0 w-52 rounded-xl border border-line bg-white/95 p-3 shadow-float backdrop-blur sm:bottom-10 sm:left-2 sm:w-60 sm:p-3.5">
@@ -205,7 +243,7 @@ function PayingCard({ target }: { target: (typeof TARGETS)[number] }) {
           <span className={`h-1.5 w-1.5 rounded-full ${done ? "bg-ok" : "animate-pulseDot bg-btc"}`} />
           {done ? "Paid" : "Paying…"}
         </span>
-        <span className="num text-subtle">1 block</span>
+        <span className="num text-subtle">after grace</span>
       </div>
       <div className="num mt-1.5 text-2xl font-medium tracking-tight">
         {n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-subtle">MUSD</span>
@@ -213,7 +251,7 @@ function PayingCard({ target }: { target: (typeof TARGETS)[number] }) {
       <div className="mt-1 text-[11px] text-muted">
         Vault → <span className="text-fg">{target.label.toLowerCase()}</span>
       </div>
-      <div className="num mt-1 text-[10px] text-subtle">promise broken · no one approved it</div>
+      <div className="num mt-1 text-[10px] text-subtle">missed payment · anyone can trigger</div>
     </div>
   )
 }

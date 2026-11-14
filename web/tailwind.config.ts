@@ -12,8 +12,8 @@ export default {
         line: { DEFAULT: "#E8E8EB", strong: "#D6D6DB" },
         fg: "#0A0A0B",
         muted: "#6B6E76",
-        subtle: "#9B9EA6",
-        btc: { DEFAULT: "#F7931A", ink: "#C2650A", wash: "#FFF4E6", line: "#FBD9AE" },
+        subtle: "#6C7078", // ≥ 4.5:1 on canvas, soft and white (WCAG AA small text)
+        btc: { DEFAULT: "#F7931A", ink: "#A8540A", wash: "#FFF4E6", line: "#FBD9AE" },
         ok: { DEFAULT: "#15803D", wash: "#ECFDF3" },
         warn: { DEFAULT: "#B45309", wash: "#FFFBEB" },
         bad: { DEFAULT: "#DC2626", wash: "#FEF2F2" },

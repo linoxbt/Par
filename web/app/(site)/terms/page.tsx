@@ -1,8 +1,10 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { Callout, DocH2, DocLayout } from "@/components/DocLayout"
 
 const TOC = [
   { id: "agreement", title: "Agreement" },
+  { id: "who", title: "Who we are" },
   { id: "service", title: "What Par is" },
   { id: "testnet", title: "Testnet and no value" },
   { id: "eligibility", title: "Eligibility" },
@@ -15,18 +17,41 @@ const TOC = [
   { id: "warranty", title: "No warranty" },
   { id: "liability", title: "Limitation of liability" },
   { id: "indemnity", title: "Indemnity" },
+  { id: "law", title: "Governing law and disputes" },
   { id: "changes", title: "Changes and termination" },
   { id: "contact", title: "Contact" },
 ]
 
+export const metadata: Metadata = {
+  title: "Terms of use",
+  description: "The terms for using the Par website and app: an open-source, unaudited testnet project provided as is, with no warranty.",
+  alternates: { canonical: "/terms" },
+}
+
 export default function Terms() {
   return (
-    <DocLayout kicker="Legal" title="Terms of use" updated="14 November 2026" toc={TOC} intro="These terms govern your use of the Par website and app. Please read them; by using Par you agree to them.">
+    <DocLayout
+      kicker="Legal"
+      title="Terms of use"
+      updated="14 November 2026"
+      toc={TOC}
+      intro="These terms govern your use of the Par website and app. They take effect on 14 November 2026. Please read them; by using Par you agree to them."
+    >
       <DocH2 id="agreement">Agreement</DocH2>
       <p>
         These Terms of Use (&ldquo;Terms&rdquo;) apply to the website at par-rosy.vercel.app, the Par web application and any related pages (together, the
         &ldquo;Interface&rdquo;). By accessing or using the Interface you agree to these Terms, our <Link href="/privacy">Privacy policy</Link> and our{" "}
         <Link href="/cookies">Cookie policy</Link>. If you don&apos;t agree, don&apos;t use the Interface.
+      </p>
+
+      <DocH2 id="who">Who we are</DocH2>
+      <p>
+        Par is an open-source hackathon project. &ldquo;We&rdquo; and &ldquo;us&rdquo; mean the contributors who maintain the{" "}
+        <a href="https://github.com/linoxbt/par" target="_blank" rel="noreferrer">
+          linoxbt/par
+        </a>{" "}
+        repository on GitHub. Par is not offered by a bank, broker or other regulated firm, and you can reach us only through that repository (see{" "}
+        <a href="#contact">Contact</a>).
       </p>
 
       <DocH2 id="service">What Par is</DocH2>
@@ -54,6 +79,10 @@ export default function Terms() {
         The Interface is currently configured for Mezo testnet. Testnet BTC and MUSD have no monetary value. The Contracts have not been audited. Do not send
         assets of real value to any address shown in the Interface.
       </Callout>
+      <p>
+        Par is experimental. Testnet deployments may be replaced or reset, and the Interface may point to new contract addresses, without notice. Anything you
+        do on testnet is for testing only.
+      </p>
 
       <DocH2 id="eligibility">Eligibility</DocH2>
       <p>
@@ -95,7 +124,8 @@ export default function Terms() {
       <DocH2 id="third">Third-party services</DocH2>
       <p>
         The Interface relies on services we don&apos;t control, including the Mezo network and its RPC endpoints, Mezo&apos;s MUSD contracts and price feed,
-        Reown (WalletConnect), Mezo Passport, wallet providers, the Mezo block explorer, GitHub and Vercel (hosting). Their own terms and privacy policies apply,
+        Reown (WalletConnect), Mezo Passport, the Base Account SDK from Coinbase that ships inside the wallet libraries, wallet providers, the Mezo block explorer,
+        GitHub and Vercel (hosting). Their own terms and privacy policies apply,
         and we are not responsible for their availability or conduct.
       </p>
 
@@ -121,6 +151,11 @@ export default function Terms() {
         implied, including merchantability, fitness for a particular purpose, accuracy and non-infringement. We don&apos;t warrant that the Interface will be
         uninterrupted, secure or error-free, or that any figure it displays (prices, ratios, &ldquo;holds if BTC falls&rdquo; estimates) is accurate.
       </p>
+      <p>
+        In particular, Par is an <strong>unaudited hackathon project running on a test network</strong>. The Contracts may contain bugs that cause commitments
+        to fail or funds to be lost, and the Interface may show wrong or stale data. The source code is licensed under the MIT License, which also provides it
+        &ldquo;as is&rdquo;, without warranty.
+      </p>
 
       <DocH2 id="liability">Limitation of liability</DocH2>
       <p>
@@ -136,6 +171,13 @@ export default function Terms() {
         the Interface, your breach of these Terms or your violation of any law or third-party right.
       </p>
 
+      <DocH2 id="law">Governing law and disputes</DocH2>
+      <p>
+        Par has no operating company, and these Terms do not choose the law of any particular country. Nothing in them limits rights you have under mandatory
+        consumer-protection law where you live. If you have a complaint, contact us first (see <a href="#contact">Contact</a>) so we can try to resolve it
+        informally.
+      </p>
+
       <DocH2 id="changes">Changes and termination</DocH2>
       <p>
         We may change these Terms by posting an updated version with a new &ldquo;last updated&rdquo; date; continuing to use the Interface means you accept the
@@ -145,7 +187,15 @@ export default function Terms() {
 
       <DocH2 id="contact">Contact</DocH2>
       <p>
-        Questions about these Terms: open an issue on <a href="https://github.com/linoxbt/par/issues" target="_blank" rel="noreferrer">GitHub</a>.
+        Questions about these Terms: open an issue on{" "}
+        <a href="https://github.com/linoxbt/par/issues" target="_blank" rel="noreferrer">
+          GitHub
+        </a>
+        . For anything private (a complaint, a legal notice, or a security or privacy matter), open a{" "}
+        <a href="https://github.com/linoxbt/par/security/advisories/new" target="_blank" rel="noreferrer">
+          private security advisory
+        </a>{" "}
+        on the repository instead. Only you and the maintainers can see it.
       </p>
     </DocLayout>
   )

@@ -1,21 +1,12 @@
-"use client"
+import { DocLinks } from "@/components/docs/DocLinks"
+import { Toc } from "@/components/docs/Toc"
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { useEffect, useState } from "react"
+export type TocItem = { id: string; title: string; level?: number }
 
-export type TocItem = { id: string; title: string }
-
-const DOCS: [string, string][] = [
-  ["/docs", "Documentation"],
-  ["/developers", "Developers"],
-  ["/security", "Security"],
-  ["/terms", "Terms of use"],
-  ["/privacy", "Privacy policy"],
-  ["/cookies", "Cookie policy"],
-]
-
-/** Sidebar + content layout for Docs and the legal pages, with a scroll-spy table of contents. */
+/**
+ * Layout for long-form documents (legal pages): content with a sticky "On this page" column on desktop
+ * and a collapsible "On this page" disclosure on small screens. Shares the Toc component with /docs.
+ */
 export function DocLayout({
   kicker,
   title,
@@ -31,87 +22,28 @@ export function DocLayout({
   toc: TocItem[]
   children: React.ReactNode
 }) {
-  const path = usePathname()
-  const [active, setActive] = useState(toc[0]?.id)
-  useEffect(() => {
-    const els = toc.map((t) => document.getElementById(t.id)).filter(Boolean) as HTMLElement[]
-    const io = new IntersectionObserver(
-      (entries) => {
-        const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
-        if (vis[0]) setActive(vis[0].target.id)
-      },
-      { rootMargin: "-90px 0px -65% 0px" },
-    )
-    els.forEach((e) => io.observe(e))
-    return () => io.disconnect()
-  }, [toc])
-
   return (
     <div className="mx-auto max-w-6xl px-5 pb-24 pt-10 sm:pt-14">
-      <div className="grid gap-10 lg:grid-cols-[220px_1fr] lg:gap-14">
-        <aside className="lg:sticky lg:top-24 lg:self-start">
-          {/* mobile: jump menu */}
-          <div className="lg:hidden">
-            <label className="text-xs text-muted" htmlFor="doc-jump">
-              On this page
-            </label>
-            <select
-              id="doc-jump"
-              className="mt-1 w-full rounded-xl border border-line-strong bg-white px-3 py-2.5 text-sm"
-              value={active}
-              onChange={(e) => {
-                setActive(e.target.value)
-                document.getElementById(e.target.value)?.scrollIntoView({ behavior: "smooth" })
-              }}
-            >
-              {toc.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.title}
-                </option>
-              ))}
-            </select>
-          </div>
-          <nav className="hidden lg:block">
-            <div className="tag mb-3">On this page</div>
-            <ul className="space-y-0.5 border-l border-line">
-              {toc.map((t) => (
-                <li key={t.id}>
-                  <a
-                    href={`#${t.id}`}
-                    className={`-ml-px block border-l py-1.5 pl-3 text-sm transition ${active === t.id ? "border-btc font-medium text-fg" : "border-transparent text-muted hover:text-fg"}`}
-                  >
-                    {t.title}
-                  </a>
-                </li>
-              ))}
-            </ul>
-            <div className="tag mb-3 mt-8">Documents</div>
-            <ul className="space-y-1.5 text-sm">
-              {DOCS.map(([href, label]) => (
-                <li key={href}>
-                  <Link href={href} className={path === href ? "font-medium text-fg" : "text-muted hover:text-fg"}>
-                    {label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        </aside>
-
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_220px] lg:gap-16">
         <article className="min-w-0 max-w-3xl">
           <div className="tag">{kicker}</div>
           <h1 className="h-display mt-3 text-[40px] sm:text-5xl">{title}</h1>
           {intro && <div className="mt-4 text-[17px] leading-relaxed text-muted">{intro}</div>}
           {updated && <p className="mt-3 text-sm text-subtle">Last updated {updated}</p>}
+          <Toc items={toc} variant="inline" offset={110} className="mt-8 lg:hidden" />
           <div className="doc mt-10">{children}</div>
-          <div className="mt-16 flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-6 text-sm text-muted lg:hidden">
-            {DOCS.map(([href, label]) => (
-              <Link key={href} href={href} className={path === href ? "font-medium text-fg" : "hover:text-fg"}>
-                {label}
-              </Link>
-            ))}
+          <div className="mt-16 border-t border-line pt-6 lg:hidden">
+            <DocLinks variant="inline" />
           </div>
         </article>
+
+        <aside className="hidden lg:block">
+          <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto pb-6">
+            <Toc items={toc} variant="aside" offset={110} />
+            <div className="mb-3 mt-10 text-[13px] font-medium text-fg">Documents</div>
+            <DocLinks />
+          </div>
+        </aside>
       </div>
     </div>
   )

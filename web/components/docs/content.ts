@@ -1,17 +1,18 @@
 /**
- * Server-only loader for docs content. Pages live as Markdown in app/(site)/docs/_content/<tab>/<slug>.md
+ * Server-only loader for docs content. Pages live as Markdown in app/(docs)/docs/_content/<tab>/<slug>.md
  * and are read with fs at build time (every docs route is statically rendered).
  *
- * `{{name}}` placeholders are filled from the deployment file (contracts/deployments/matsnet.json), so
- * contract addresses are written down exactly once.
+ * `{{name}}` placeholders are filled from lib/deployments.ts (generated from contracts/deployments/matsnet.json
+ * by contracts/scripts/export-abis.js), so contract addresses are written down exactly once.
  */
 import fs from "fs"
 import path from "path"
-import deployment from "../../../contracts/deployments/matsnet.json"
+import { DEPLOYMENTS } from "@/lib/deployments"
 import { DOC_PAGES, NAV_PAGES, getDocPage, type DocPage } from "@/lib/docs-nav"
 import { headings, parse, searchSections, toMarkdown, type Block, type Heading } from "./markdown"
 
-const CONTENT_DIR = path.join(process.cwd(), "app", "(site)", "docs", "_content")
+const deployment = DEPLOYMENTS.matsnet
+const CONTENT_DIR = path.join(process.cwd(), "app", "(docs)", "docs", "_content")
 const EXPLORER = "https://explorer.test.mezo.org"
 
 export const VARS: Record<string, string> = {

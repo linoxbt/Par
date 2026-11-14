@@ -1,0 +1,57 @@
+/* Docs chrome. Imported only by app/(docs)/docs/layout.tsx (the (docs) group renders no site header). */
+
+.pd-root {
+  --pd-header: 105px; /* 56px top bar + 48px mobile sub-header + border */
+}
+@media (min-width: 1024px) {
+  .pd-root {
+    --pd-header: 113px; /* 64px top bar + 48px tabs + border */
+  }
+}
+
+.pd-root .pd-heading {
+  scroll-margin-top: calc(var(--pd-header) + 20px);
+}
+
+@keyframes pd-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes pd-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes pd-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.pd-slide {
+  animation: pd-slide 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.pd-fade {
+  animation: pd-fade 0.18s ease-out both;
+}
+.pd-pop {
+  animation: pd-pop 0.16s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pd-slide,
+  .pd-fade,
+  .pd-pop {
+    animation: none;
+  }
+}

@@ -32,9 +32,17 @@ body {
   .h-section {
     @apply text-3xl font-semibold tracking-[-0.03em] sm:text-4xl;
   }
-  .dots {
-    background-image: radial-gradient(rgba(10, 10, 11, 0.09) 1px, transparent 1px);
-    background-size: 18px 18px;
+}
+
+/* Respect reduced motion: no entrance/pulse animations, no smooth scrolling.
+   (Canvas loops check the same media query in JS and draw one static frame.) */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .animate-rise,
+  .animate-pulseDot {
+    animation: none !important;
   }
 }
 

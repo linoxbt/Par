@@ -77,7 +77,7 @@ export function CircuitGraph({
         <text x={CX} y={CY - 2} textAnchor="middle" className="fill-[#0A0A0B] text-[13px] font-semibold">
           Par
         </text>
-        <text x={CX} y={CY + 13} textAnchor="middle" className="fill-[#9B9EA6] text-[10px]">
+        <text x={CX} y={CY + 13} textAnchor="middle" className="fill-[#6C7078] text-[10px]">
           Circuit
         </text>
       </motion.g>
@@ -99,7 +99,7 @@ export function CircuitGraph({
                   transition={{ duration: 0.6 }}
                 />
                 <rect x={mid.x - 30} y={mid.y - 10} width={60} height={20} rx={6} fill="#FFFFFF" stroke="#E8E8EB" />
-                <text x={mid.x} y={mid.y + 4} textAnchor="middle" className={`font-mono text-[11px] ${on ? "fill-[#C2650A]" : "fill-[#6B6E76]"}`}>
+                <text x={mid.x} y={mid.y + 4} textAnchor="middle" className={`font-mono text-[11px] ${on ? "fill-[#A8540A]" : "fill-[#6B6E76]"}`}>
                   {fmt(e.amount)}
                 </text>
               </motion.g>
@@ -126,7 +126,7 @@ export function CircuitGraph({
                     transition={{ duration: 0.8 }}
                   />
                   <rect x={mid.x - 30} y={mid.y - 10} width={60} height={20} rx={6} fill="#FFFFFF" stroke="#FBD9AE" />
-                  <text x={mid.x} y={mid.y + 4} textAnchor="middle" className="fill-[#C2650A] font-mono text-[11px]">
+                  <text x={mid.x} y={mid.y + 4} textAnchor="middle" className="fill-[#A8540A] font-mono text-[11px]">
                     {fmt(Math.abs(n.net ?? 0))}
                   </text>
                 </motion.g>
@@ -144,7 +144,7 @@ export function CircuitGraph({
               {n.label}
             </text>
             {n.sub && (
-              <text x={p.x} y={p.y + NR + 16} textAnchor="middle" className="fill-[#9B9EA6] font-mono text-[10px]">
+              <text x={p.x} y={p.y + NR + 16} textAnchor="middle" className="fill-[#6C7078] font-mono text-[10px]">
                 {n.sub}
               </text>
             )}

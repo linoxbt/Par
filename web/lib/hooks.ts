@@ -204,7 +204,8 @@ export function useCommitment(vault?: Address, id?: bigint) {
     abi: parVaultAbi,
     functionName: "getCommitment",
     args: [id ?? 0n],
-    query: { enabled: !!vault && id !== undefined, refetchInterval: 8_000 },
+    // a missing vault/commitment reverts deterministically: don't spend ~15 s on retries before saying so
+    query: { enabled: !!vault && id !== undefined, refetchInterval: 8_000, retry: 1 },
   })
   return { c: q.data ? ({ ...(q.data as object), id: id! } as Commitment) : undefined, refetch: q.refetch, error: q.error }
 }

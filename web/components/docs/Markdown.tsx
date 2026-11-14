@@ -10,7 +10,7 @@ import { Table } from "./Table"
 import { Tabs } from "./Tabs"
 import type { Block } from "./markdown"
 
-const linkCls = "font-medium text-fg underline decoration-btc/40 decoration-1 underline-offset-[3px] transition hover:decoration-btc"
+const linkCls = "font-medium text-fg underline decoration-btc/40 decoration-1 underline-offset-[3px] transition hover:decoration-btc [&_code]:border-btc-line [&_code]:text-btc-ink"
 
 /** Inline markdown: **bold**, `code`, [text](href). */
 export function Inline({ text }: { text: string }) {

@@ -1,21 +1,23 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { fmtBps } from "@/lib/format"
+import { useReducedMotion } from "./motion"
 
 const STEPS = [
   { t: "Lock", d: "Open a vault with BTC. Capacity and rate are fixed at open." },
   { t: "Promise", d: "Pledge undrawn capacity. It must survive a 40% BTC drop." },
-  { t: "Miss", d: "A payment is late. Anyone can trigger the vault." },
+  { t: "Miss", d: "A payment is missed. Once the grace period ends, anyone can trigger the vault." },
   { t: "Pay", d: "Buffer first, then mint. Straight to the beneficiary." },
 ]
 
-const E18 = 1e18
-
-export function Story({ price }: { price: number }) {
+/** `price` (USD/BTC) and `rate` (bps) are live from the Mezo oracle; undefined while loading. */
+export function Story({ price, rate }: { price?: number; rate?: number }) {
   const ref = useRef<HTMLDivElement>(null)
   const [progress, setProgress] = useState(0)
   const [btc, setBtc] = useState("0.25")
   const [pinned, setPinned] = useState(true)
+  const reduce = useReducedMotion()
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)")
@@ -47,18 +49,20 @@ export function Story({ price }: { price: number }) {
     const el = ref.current!
     const total = el.getBoundingClientRect().height - window.innerHeight
     const top = el.getBoundingClientRect().top + window.scrollY
-    window.scrollTo({ top: top + total * ((i + 0.5) / 4), behavior: "smooth" })
+    window.scrollTo({ top: top + total * ((i + 0.5) / 4), behavior: reduce ? "auto" : "smooth" })
   }
 
   // model numbers (same math as lib/risk.ts, in floats for display)
+  // (undefined until the live price arrives: no made-up numbers in the meantime)
   const coll = Math.max(0, Number(btc) || 0)
   const seed = 1800
   const debt = seed * 1.001 + 200
-  const capacity = (coll * price) / 1.1
   const cover = 1500
-  const stressed = (coll * price * 0.6) / (debt + cover * 1.001)
-  const fits = stressed >= 1.6 && debt + cover * 1.001 <= capacity
-  const maxCover = Math.max(0, Math.min((coll * price * 0.6) / 1.6 - debt, capacity - debt) / 1.001)
+  const capacity = price === undefined ? undefined : (coll * price) / 1.1
+  const stressed = price === undefined ? undefined : (coll * price * 0.6) / (debt + cover * 1.001)
+  const fits = stressed === undefined || capacity === undefined ? undefined : stressed >= 1.6 && debt + cover * 1.001 <= capacity
+  const maxCover =
+    price === undefined || capacity === undefined ? undefined : Math.max(0, Math.min((coll * price * 0.6) / 1.6 - debt, capacity - debt) / 1.001)
 
   return (
     <section ref={ref} className={pinned ? "relative h-[360vh]" : "relative"}>
@@ -72,8 +76,8 @@ export function Story({ price }: { price: number }) {
             <ol className="relative">
                 <span className="absolute bottom-6 left-[5px] top-6 w-px bg-line" />
                 <span
-                  className="absolute left-[5px] top-6 w-px bg-btc transition-[height] duration-300"
-                  style={{ height: `calc(${pinned ? progress * 100 : ((step + 1) / 4) * 100}% - 48px)` }}
+                  className="absolute left-[5px] top-6 w-px bg-btc motion-safe:transition-[height] motion-safe:duration-300"
+                  style={{ height: `calc(${progress * 100}% - 48px)` }}
                 />
                 {STEPS.map((s, i) => (
                   <li key={s.t}>
@@ -88,7 +92,7 @@ export function Story({ price }: { price: number }) {
                           <span className="num text-xs">0{i + 1}</span>
                           {s.t}
                         </span>
-                        <span className={`mt-1 block text-sm transition ${i === step ? "text-muted" : "text-subtle/70"}`}>{s.d}</span>
+                        <span className={`mt-1 block text-sm transition ${i === step ? "text-muted" : "text-subtle"}`}>{s.d}</span>
                       </span>
                     </button>
                   </li>
@@ -117,9 +121,9 @@ export function Story({ price }: { price: number }) {
             <div className="relative mx-auto w-full min-w-0 max-w-[440px]">
               <div className="rounded-[22px] border border-line bg-soft p-2">
                 <div key={step} className="min-h-[340px] animate-rise rounded-2xl border border-line bg-white p-4 shadow-card sm:min-h-[360px] sm:p-5">
-                  {step === 0 && <LockCard btc={btc} setBtc={setBtc} price={price} capacity={capacity} maxCover={maxCover} />}
+                  {step === 0 && <LockCard btc={btc} setBtc={setBtc} price={price} rate={rate} capacity={capacity} maxCover={maxCover} />}
                   {step === 1 && <PromiseCard fits={fits} stressed={stressed} cover={cover} />}
-                  {step === 2 && <MissCard />}
+                  {step === 2 && <MissCard reduce={reduce} />}
                   {step === 3 && <PayCard />}
                 </div>
               </div>
@@ -152,14 +156,30 @@ function Row({ k, v, tone }: { k: string; v: React.ReactNode; tone?: "ok" | "btc
 
 const fmt = (n: number, dp = 0) => n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp })
 
-function LockCard({ btc, setBtc, price, capacity, maxCover }: { btc: string; setBtc: (v: string) => void; price: number; capacity: number; maxCover: number }) {
+const DASH = "—"
+
+function LockCard({
+  btc,
+  setBtc,
+  price,
+  rate,
+  capacity,
+  maxCover,
+}: {
+  btc: string
+  setBtc: (v: string) => void
+  price?: number
+  rate?: number
+  capacity?: number
+  maxCover?: number
+}) {
   return (
     <>
-      <Head left="Open vault" right="VAULT 0x61ef…4296" />
+      <Head left="Open vault" right="YOUR VAULT" />
       <label className="block rounded-xl bg-soft p-4">
         <span className="flex justify-between text-xs text-muted">
           <span>Lock</span>
-          <span className="num">${fmt(price)} / BTC</span>
+          <span className="num">{price === undefined ? "loading price…" : `$${fmt(price)} / BTC`}</span>
         </span>
         <span className="mt-1 flex items-baseline gap-2">
           <input
@@ -171,53 +191,60 @@ function LockCard({ btc, setBtc, price, capacity, maxCover }: { btc: string; set
           />
           <span className="text-sm text-muted">BTC</span>
         </span>
-        <span className="num text-xs text-subtle">${fmt((Number(btc) || 0) * price)}</span>
+        <span className="num text-xs text-subtle">{price === undefined ? DASH : `$${fmt((Number(btc) || 0) * price)}`}</span>
       </label>
       <div className="mt-3 divide-y divide-line">
-        <Row k="Capacity (fixed at open)" v={`${fmt(capacity)} MUSD`} />
-        <Row k="Rate (locked)" v="1.00%" />
+        <Row k="Capacity (fixed at open)" v={capacity === undefined ? DASH : `${fmt(capacity)} MUSD`} />
+        <Row k="Rate (locked at open, live)" v={rate === undefined ? DASH : fmtBps(rate)} />
         <Row k="Buffer draw" v="1,800 MUSD" />
-        <Row k="Cover you can promise" v={`${fmt(maxCover)} MUSD`} tone="btc" />
+        <Row k="Cover you can promise" v={maxCover === undefined ? DASH : `${fmt(maxCover)} MUSD`} tone="btc" />
       </div>
       <div className="mt-3 rounded-full bg-fg py-2.5 text-center text-sm font-medium text-white">Open trove</div>
     </>
   )
 }
 
-function PromiseCard({ fits, stressed, cover }: { fits: boolean; stressed: number; cover: number }) {
+function PromiseCard({ fits, stressed, cover }: { fits?: boolean; stressed?: number; cover: number }) {
+  const tone = fits === undefined ? "text-muted" : fits ? "text-ok" : "text-bad"
   return (
     <>
       <Head left="New guarantee" right="SCHEDULED" />
       <div className="divide-y divide-line">
-        <Row k="Beneficiary" v="landlord · 0x2361…1E8f" />
+        <Row k="Beneficiary" v="landlord" />
         <Row k="Schedule" v="12 × 500 MUSD, monthly" />
         <Row k="Cover cap" v={`${fmt(cover)} MUSD`} />
         <Row k="Grace period" v="3 days" />
       </div>
-      <div className={`mt-4 rounded-xl p-4 ${fits ? "bg-ok-wash" : "bg-bad-wash"}`}>
+      <div className={`mt-4 rounded-xl p-4 ${fits === undefined ? "bg-soft" : fits ? "bg-ok-wash" : "bg-bad-wash"}`}>
         <div className="flex items-center justify-between text-xs">
-          <span className={fits ? "text-ok" : "text-bad"}>{fits ? "✓ Passes the stress test" : "✕ Doesn't fit: lock more BTC"}</span>
+          <span className={tone}>{fits === undefined ? "Waiting for the live price" : fits ? "✓ Passes the stress test" : "✕ Doesn't fit: lock more BTC"}</span>
           <span className="num text-muted">needs 160%</span>
         </div>
-        <div className={`num mt-1 text-3xl font-medium tracking-tight ${fits ? "text-ok" : "text-bad"}`}>{fmt(stressed * 100)}%</div>
+        <div className={`num mt-1 text-3xl font-medium tracking-tight ${tone}`}>{stressed === undefined ? DASH : `${fmt(stressed * 100)}%`}</div>
         <div className="text-xs text-muted">vault ratio if BTC fell 40% and everything were called</div>
       </div>
     </>
   )
 }
 
-function MissCard() {
+function MissCard({ reduce }: { reduce: boolean }) {
+  // illustrative countdown to the end of the grace period (static under reduced motion)
   const [s, setS] = useState(9)
   useEffect(() => {
+    if (reduce) return
     const t = setInterval(() => setS((x) => (x <= 0 ? 9 : x - 1)), 1000)
     return () => clearInterval(t)
-  }, [])
+  }, [reduce])
   return (
     <>
       <Head left="Installments" right="CERTIFICATE #0" />
       <div className="divide-y divide-line">
         <Row k="Month 1 · 500" v="Paid by tenant" tone="ok" />
-        <Row k="Month 2 · 500" v={s > 0 ? `Late · vault pays in 0:0${s}` : "Missed · paying"} tone={s > 0 ? "btc" : "bad"} />
+        <Row
+          k="Month 2 · 500"
+          v={reduce ? "Late · in grace period" : s > 0 ? `Late · grace ends in 0:0${s}` : "Grace over · triggerable"}
+          tone={reduce || s > 0 ? "btc" : "bad"}
+        />
         <Row k="Month 3 · 500" v="Due in 30 days" tone="muted" />
       </div>
       <div className="mt-4 rounded-xl bg-fg p-4 font-mono text-[12px] leading-relaxed text-white/90">
@@ -234,7 +261,7 @@ function MissCard() {
 function PayCard() {
   return (
     <>
-      <Head left="Payout" right="BLOCK 1,204,331" />
+      <Head left="Payout" right="EXAMPLE" />
       <div className="flex items-center gap-3 rounded-xl bg-soft p-4">
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-ok-wash text-ok">✓</span>
         <div>
@@ -250,7 +277,7 @@ function PayCard() {
       </div>
       <div className="mt-3 flex items-center justify-between rounded-full border border-line px-4 py-2.5 text-xs">
         <span className="text-muted">Payout(id 0, to landlord, 500)</span>
-        <span className="text-btc-ink">explorer ↗</span>
+        <span className="text-subtle">illustrative</span>
       </div>
     </>
   )

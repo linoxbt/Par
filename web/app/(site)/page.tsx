@@ -1,12 +1,8 @@
-"use client"
-
+import type { Metadata } from "next"
 import Link from "next/link"
-import { fmtBps, fmtRatio, fmtUsd, toNum } from "@/lib/format"
-import { useMarket } from "@/lib/market"
 import { Footer } from "@/components/Footer"
 import { GlobeViz } from "@/components/landing/GlobeViz"
-import { Story } from "@/components/landing/Story"
-import { StressChart } from "@/components/landing/StressChart"
+import { LandingProof, LandingStory } from "@/components/landing/LandingClient"
 import { CodeCard, CopyChip, GlyphRain } from "@/components/landing/CodeCard"
 import {
   CertificateIllustration,
@@ -18,17 +14,23 @@ import {
   VaultIllustration,
 } from "@/components/landing/Illustrations"
 
+export const metadata: Metadata = {
+  title: { absolute: "Par · Bitcoin-backed promises on Mezo" },
+  description:
+    "Lock BTC in a vault on Mezo and back rent guarantees, bonds and trade credit with undrawn MUSD capacity. Every promise is stress-tested at BTC −40%. Testnet, unaudited.",
+  alternates: { canonical: "/" },
+}
+
 const Arrow = () => <span aria-hidden>→</span>
 
+/** Server-rendered landing page; only the live-market sections and animations hydrate. Footer: this page only. */
 export default function Landing() {
-  const m = useMarket()
-  const price = m.price ? toNum(m.price) : 66_000
   return (
     <div>
       <Hero />
-      <Story price={price} />
+      <LandingStory />
       <Products />
-      <Proof price={price} live={!!m.price} tcr={m.tcr} rate={m.globalRate} recovery={m.recoveryMode} />
+      <Proof />
       <Developers />
       <Scenario />
       <Risk />
@@ -65,7 +67,7 @@ function Hero() {
   const trust = [
     ["◐", "Built on MUSD · Mezo"],
     ["▲", "Stress-tested at −40%"],
-    ["✓", "15 contract tests passing"],
+    ["✓", "Contract tests in the repo"],
     ["{}", "Open source, MIT"],
   ]
   return (
@@ -77,8 +79,8 @@ function Hero() {
             pay themselves.
           </h1>
           <p className="mt-5 max-w-[440px] text-base leading-relaxed text-muted sm:mt-6 sm:text-[17px]">
-            Par turns undrawn Bitcoin credit into a guarantee you can hand to anyone. Lock BTC in a vault on Mezo, back a rent guarantee or a trade-credit line,
-            and the vault pays the moment a promise breaks.
+            Par turns undrawn Bitcoin credit into a guarantee you can hand to anyone. Lock BTC in a vault on Mezo and back a rent guarantee or a trade-credit
+            line. Miss a payment and the vault pays once the grace period ends. Anyone can trigger it; nobody approves it.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-2">
             <Link href="/vault" className="rounded-full bg-fg px-5 py-2.5 text-sm font-medium text-white transition hover:bg-black/80">
@@ -135,7 +137,7 @@ function Products() {
 
 // ---------------------------------------------------------------- proof
 
-function Proof({ price, live, tcr, rate, recovery }: { price: number; live: boolean; tcr?: bigint; rate?: number; recovery?: boolean }) {
+function Proof() {
   return (
     <section className="border-y border-line bg-white">
       <div className="mx-auto max-w-6xl px-5 py-20 sm:py-28">
@@ -150,29 +152,7 @@ function Proof({ price, live, tcr, rate, recovery }: { price: number; live: bool
             </span>
           ))}
         </div>
-        <div className="mt-12 grid grid-cols-2 border-y border-line md:grid-cols-4">
-          {[
-            ["BTC / USD", live ? fmtUsd(price) : "…", live ? "Mezo oracle, live" : "connecting"],
-            ["System TCR", fmtRatio(tcr), recovery ? "Recovery Mode" : "Normal Mode"],
-            ["Rate for new troves", rate !== undefined ? fmtBps(rate) : "…", "fixed for the whole capacity"],
-            ["Netted in tests", "96.55%", "2,900 invoiced · 100 moved"],
-          ].map(([l, v, s], i) => (
-            <div key={l} className={`py-6 ${i % 2 ? "pl-6" : "pr-6"} ${i > 0 ? "md:border-l md:pl-6" : ""} ${i === 1 ? "border-l" : ""} ${i === 3 ? "border-l" : ""} border-line`}>
-              <div className="text-xs text-muted">{l}</div>
-              <div className="num mt-1 text-3xl font-medium tracking-tight">{v}</div>
-              <div className="mt-1 text-xs text-subtle">{s}</div>
-            </div>
-          ))}
-        </div>
-        <div className="mt-10">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-xs text-muted">
-            <span className="flex items-center gap-2">
-              <span className="h-0.5 w-4 bg-btc" /> Vault ratio after every promise is called, as BTC falls
-            </span>
-            <span className="num">example vault · 0.25 BTC · 1,500 MUSD promised</span>
-          </div>
-          <StressChart price={price} />
-        </div>
+        <LandingProof />
       </div>
     </section>
   )
@@ -187,12 +167,12 @@ function Developers() {
         <h2 className="h-section">
           Read it <span className="text-subtle">this afternoon.</span>
         </h2>
-        <p className="mt-4 max-w-md text-muted">Three small contracts, a keeper and this app. The tests run in a minute, and the same suite runs against the real MUSD system.</p>
+        <p className="mt-4 max-w-md text-muted">Three small contracts, a keeper and this app. The tests run in about a minute, and the core suite also runs against the real MUSD system.</p>
         <div className="mt-8">
           <CopyChip text="git clone https://github.com/linoxbt/par && cd par/contracts && npm i && npm test" />
         </div>
         <ul className="mt-6 space-y-2.5 text-sm">
-          {["15 tests: guarantees, claims, Recovery Mode, Circuit", "One script reruns them against real MUSD contracts", "Keeper and frontend included"].map((t) => (
+          {["Tests for guarantees, claims, Recovery Mode and Circuit", "One script reruns the core suite against the real MUSD contracts", "Keeper and frontend included"].map((t) => (
             <li key={t} className="flex items-center gap-2.5">
               <span className="text-ok">✓</span> {t}
             </li>
@@ -239,8 +219,12 @@ function Scenario() {
             <div className="num text-5xl font-medium tracking-tight">
               0<span className="text-xl text-subtle"> MUSD</span>
             </div>
-            <div className="mt-2 font-mono text-[10px] uppercase tracking-wider text-subtle">borrowed until missed</div>
+            <div className="mt-2 font-mono text-[10px] uppercase tracking-wider text-subtle">drawn for it until a month is missed</div>
           </div>
+          <p className="col-span-2 text-xs leading-relaxed text-muted">
+            Every vault draws MUSD&apos;s 1,800 minimum when it opens and keeps it as a buffer that pays first. The guarantee itself draws nothing until it is
+            called.
+          </p>
         </div>
       </div>
     </section>
@@ -253,7 +237,13 @@ function Risk() {
   const cards = [
     { n: "#1", t: "Stress-tested", d: "Every promise must hold at BTC −40% with everything called.", link: ["Read the risk model", "/security"], ill: <GaugeIllustration /> },
     { n: "#2", t: "Your vault, your keys", d: "Each vault is your own immutable contract. No admin, no upgrades.", link: ["How vaults work", "/developers#contracts"], ill: <LockIllustration /> },
-    { n: "#3", t: "Recovery Mode ready", d: "When MUSD restricts debt, the vault tops up from a BTC reserve.", link: ["See the waterfall", "/security#waterfall"], ill: <ShieldIllustration /> },
+    {
+      n: "#3",
+      t: "A plan for Recovery Mode",
+      d: "In Recovery Mode a payout that needs new debt also needs a BTC top-up, paid from idle BTC you keep in the vault. If that reserve is short, the payout waits until it is funded.",
+      link: ["See the waterfall", "/security#waterfall"],
+      ill: <ShieldIllustration />,
+    },
   ]
   return (
     <section className="mx-auto max-w-6xl px-5 pb-20 sm:pb-28">
@@ -280,8 +270,8 @@ function Risk() {
 
 const FAQ = [
   ["Isn't this just Aave credit delegation?", "No. On Aave the rate floats and the pool can be fully borrowed by others right when a claim arrives. MUSD is minted, not pooled, and a Mezo trove locks its rate across its whole capacity at open. A Par promise depends only on your own Bitcoin."],
-  ["What happens if Bitcoin crashes?", "Every promise must survive a 40% drop with every promise called and the vault still above 160%. Past that the vault can't make new promises and the owner is alerted. Far enough to hit liquidation, a guarantee can fail, and the certificate shows exactly how far that is."],
-  ["What about Recovery Mode?", "In Recovery Mode MUSD only allows new debt with a collateral top-up that improves the ratio. The vault computes the BTC it needs, pays from an idle reserve, and if the reserve is short the keeper alerts the owner and retries."],
+  ["What happens if Bitcoin crashes?", "Every promise must survive a 40% drop with every promise called and the vault still above 160%. Past that the vault can't make new promises and the owner is alerted. If BTC falls far enough for the trove to be liquidated (below 110%), guarantees can fail. The certificate shows how far BTC can fall before the vault, with everything called, reaches 150%, MUSD's Recovery Mode line, which comes well before liquidation."],
+  ["What about Recovery Mode?", "In Recovery Mode MUSD only allows new debt with a collateral top-up that improves the ratio. Payouts from the MUSD buffer need no new debt and are unaffected. For the rest, the vault computes the BTC it needs and adds it from idle BTC held in the vault as a reserve; if the reserve is short, the payout reverts with the amount needed and the keeper alerts the owner and retries. While Recovery Mode is on and promises are live, the owner can't withdraw that BTC reserve, but can still withdraw the MUSD buffer at any time."],
   ["Who decides disputed claims?", "For installments nobody: the contract sees whether the payment arrived. For bonds there's a challenge window, and only disputed claims go to an arbiter both sides agreed on."],
   ["Why does a vault borrow 1,800 MUSD at the start?", "It's MUSD's minimum loan. Par keeps it in the vault as a buffer that pays the first claims without new debt."],
 ]

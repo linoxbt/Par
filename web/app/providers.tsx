@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { createContext, useContext, useState } from "react"
 import { http, WagmiProvider, type Config } from "wagmi"
 import { createAppKit } from "@reown/appkit/react"
+import { OptionsController } from "@reown/appkit-controllers"
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi"
 import { defineChain as defineAppKitChain } from "@reown/appkit/networks"
 import {
@@ -46,6 +47,9 @@ const mezoAppKitNetwork = defineAppKitChain({
 const btcLabel = (w: any) => (opts: any) => ({ ...w(opts), name: `${w(opts).name} (Bitcoin)` })
 
 function makeAppKitConfig(): Config {
+  // This AppKit release never forwards `enableBaseAccount` to its options store, so the wagmi adapter
+  // would add a Base Account connector whose SDK loads Coinbase telemetry on page load. Set it first.
+  OptionsController.setEnableBaseAccount(false)
   // Mezo Passport's Bitcoin wallets (Xverse, Unisat, OKX), routed through a Mezo smart account.
   const bitcoinConnectors = connectorsForWallets(
     [
@@ -76,8 +80,9 @@ function makeAppKitConfig(): Config {
       url: typeof window !== "undefined" ? window.location.origin : "https://par-rosy.vercel.app",
       icons: [typeof window !== "undefined" ? `${window.location.origin}/icon.svg` : "https://par-rosy.vercel.app/icon.svg"],
     },
-    // No Coinbase SDK: it phones home (cca-lite.coinbase.com) and sets storage on load.
+    // No Coinbase / Base Account SDKs: they phone home (cca-lite.coinbase.com) and set storage on load.
     enableCoinbase: false,
+    enableBaseAccount: false,
     features: { analytics: false, email: false, socials: false, swaps: false, onramp: false, send: false, history: false },
     themeMode: "light",
     themeVariables: {

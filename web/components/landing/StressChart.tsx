@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { MONO } from "./motion"
 
 /**
  * Interactive stress curve for an example vault: collateral ratio after every promise is called,
@@ -10,6 +11,7 @@ export function StressChart({ price, coll = 0.25, promised = 1500 }: { price: nu
   const debt = 1800 * 1.001 + 200
   const need = promised * 1.001
   const box = useRef<HTMLDivElement>(null)
+  const uid = "sc" + useId().replace(/[^a-zA-Z0-9_-]/g, "")
   const [W, setW] = useState(720)
   useEffect(() => {
     const ro = new ResizeObserver(([e]) => setW(Math.max(300, Math.round(e.contentRect.width))))
@@ -36,9 +38,10 @@ export function StressChart({ price, coll = 0.25, promised = 1500 }: { price: nu
   const h = pts[hover]
 
   const refs = [
-    { r: 1.6, label: "160% floor", c: "#C2650A" },
-    { r: 1.5, label: "150% Recovery", c: "#B45309" },
-    { r: 1.1, label: "110% liquidation", c: "#DC2626" },
+    // 150% sits just under 160%, so its label goes on the left (where the curve is far above it)
+    { r: 1.6, label: "160% floor", c: "#A8540A", left: false },
+    { r: 1.5, label: "150% Recovery", c: "#B45309", left: true },
+    { r: 1.1, label: "110% liquidation", c: "#DC2626", left: false },
   ]
 
   return (
@@ -68,10 +71,10 @@ export function StressChart({ price, coll = 0.25, promised = 1500 }: { price: nu
         }}
       >
         <defs>
-          <pattern id="dotfill" width="5" height="5" patternUnits="userSpaceOnUse">
+          <pattern id={`${uid}-dots`} width="5" height="5" patternUnits="userSpaceOnUse">
             <rect width="1.6" height="1.6" fill="#F7931A" opacity="0.55" />
           </pattern>
-          <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={`${uid}-fade`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#fff" stopOpacity="0" />
             <stop offset="100%" stopColor="#fff" stopOpacity="0.85" />
           </linearGradient>
@@ -79,29 +82,39 @@ export function StressChart({ price, coll = 0.25, promised = 1500 }: { price: nu
         {[0, 1, 2, 3, 4].map((g) => (
           <g key={g}>
             <line x1={pad.l} x2={W - pad.r} y1={y((maxR / 4) * g)} y2={y((maxR / 4) * g)} stroke="#EFEFF1" />
-            <text x={pad.l - 8} y={y((maxR / 4) * g) + 4} textAnchor="end" fontSize="10" fill="#9B9EA6" fontFamily="ui-monospace,monospace">
+            <text x={pad.l - 8} y={y((maxR / 4) * g) + 4} textAnchor="end" fontSize="10" fill="#6B6E76" fontFamily={MONO}>
               {Math.round((maxR / 4) * g * 100)}%
             </text>
           </g>
         ))}
         {(W < 500 ? [0, 40, 80] : [0, 20, 40, 60, 80]).map((d) => (
-          <text key={d} x={x(d)} y={H - 10} textAnchor="middle" fontSize="10" fill="#9B9EA6" fontFamily="ui-monospace,monospace">
+          <text key={d} x={x(d)} y={H - 10} textAnchor="middle" fontSize="10" fill="#6B6E76" fontFamily={MONO}>
             −{d}%
           </text>
         ))}
-        <path d={area} fill="url(#dotfill)" />
-        <path d={area} fill="url(#fade)" />
+        <path d={area} fill={`url(#${uid}-dots)`} />
+        <path d={area} fill={`url(#${uid}-fade)`} />
         <path d={line} fill="none" stroke="#F7931A" strokeWidth="2" />
         {refs.map((rf) => (
           <g key={rf.label}>
             <line x1={pad.l} x2={W - pad.r} y1={y(rf.r)} y2={y(rf.r)} stroke={rf.c} strokeDasharray="4 4" strokeOpacity="0.7" />
-            <text x={W - pad.r - 4} y={y(rf.r) - 5} textAnchor="end" fontSize="10" fill={rf.c} fontFamily="ui-monospace,monospace">
+            <text
+              x={rf.left ? pad.l + 6 : W - pad.r - 4}
+              y={y(rf.r) - 5}
+              textAnchor={rf.left ? "start" : "end"}
+              fontSize="10"
+              fill={rf.c}
+              fontFamily={MONO}
+              paintOrder="stroke"
+              stroke="#fff"
+              strokeWidth="3"
+            >
               {W < 500 ? rf.label.split(" ")[0] : rf.label}
             </text>
           </g>
         ))}
         <line x1={x(40)} x2={x(40)} y1={pad.t} y2={H - pad.b} stroke="#0A0A0B" strokeOpacity="0.15" />
-        <text x={x(40) + 5} y={pad.t + 10} fontSize="10" fill="#6B6E76" fontFamily="ui-monospace,monospace">
+        <text x={x(40) + 5} y={pad.t + 10} fontSize="10" fill="#6B6E76" fontFamily={MONO}>
           stress test
         </text>
         {liq && <circle cx={x(liq.d)} cy={y(liq.r)} r="4" fill="#DC2626" />}
