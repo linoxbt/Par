@@ -6,7 +6,12 @@
   "scripts": {
     "build": "hardhat compile",
     "test": "hardhat test",
-    "deploy:matsnet": "hardhat run scripts/deploy-par.ts --network matsnet"
+    "deploy:matsnet": "hardhat run scripts/deploy-par.ts --network matsnet",
+    "abis": "hardhat compile && node scripts/export-abis.js",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy-local.ts --network localhost",
+    "seed:local": "hardhat run scripts/seed-demo.ts --network localhost",
+    "test:musd": "./scripts/run-musd-integration.sh"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",

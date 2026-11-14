@@ -6,3 +6,4 @@ coverage
 .env
 deployments/*.local.json
 .musd
+deployments/localhost.json
