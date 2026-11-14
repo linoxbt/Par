@@ -37,7 +37,7 @@ export default function CircuitHome() {
       <PageHead
         index="03"
         eyebrow="Par Circuit"
-        title="Trade credit that clears itself"
+        title="Trade credit" muted="that clears itself."
         sub="Members log invoices; the contract nets them as they're accepted. At cycle end only net debtors pay, and a defaulter is force-settled from the clearing line in their Par vault."
       />
 

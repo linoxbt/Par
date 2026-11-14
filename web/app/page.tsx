@@ -1,26 +1,58 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
-import { parseEther } from "viem"
-import { fmtMusd, fmtPct, fmtUsd, toNum } from "@/lib/format"
-import { useMarket, useProtocol } from "@/lib/hooks"
-import { maxDrop, openPreview } from "@/lib/risk"
-import { Meter } from "@/components/ui"
+import { fmtBps, fmtRatio, fmtUsd, toNum } from "@/lib/format"
+import { useMarket } from "@/lib/hooks"
+import { GlobeViz } from "@/components/landing/GlobeViz"
+import { Story } from "@/components/landing/Story"
+import { StressChart } from "@/components/landing/StressChart"
+import { CodeCard, CopyChip, GlyphRain } from "@/components/landing/CodeCard"
+import {
+  CertificateIllustration,
+  CircuitIllustration,
+  ClaimIllustration,
+  GaugeIllustration,
+  LockIllustration,
+  ShieldIllustration,
+  VaultIllustration,
+} from "@/components/landing/Illustrations"
 
-const E18 = 10n ** 18n
+const Arrow = () => <span aria-hidden>→</span>
 
 export default function Landing() {
   const m = useMarket()
-  const p = useProtocol()
-  const price = m.price ?? 66_000n * E18
+  const price = m.price ? toNum(m.price) : 66_000
   return (
     <div>
       <Hero />
-      <Moves />
+      <Story price={price} />
       <Products />
-      <Calculator price={price} stressBps={p?.stressBps ?? 4000n} targetIcr={p?.targetIcr ?? 16n * 10n ** 17n} live={m.price !== undefined} />
+      <Proof price={price} live={!!m.price} tcr={m.tcr} rate={m.globalRate} recovery={m.recoveryMode} />
+      <Developers />
+      <Scenario />
+      <Risk />
+      <Faq />
       <Closing />
+    </div>
+  )
+}
+
+function SectionHead({ title, muted, side, link }: { title: string; muted: string; side?: string; link?: { href: string; label: string } }) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-6 border-b border-line pb-8">
+      <h2 className="h-section max-w-2xl">
+        {title} <span className="text-subtle">{muted}</span>
+      </h2>
+      {(side || link) && (
+        <div className="max-w-xs text-sm">
+          {side && <p className="text-muted">{side}</p>}
+          {link && (
+            <Link href={link.href} className="mt-2 inline-flex items-center gap-1 font-medium text-btc-ink hover:underline">
+              {link.label} <Arrow />
+            </Link>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -28,205 +60,43 @@ export default function Landing() {
 // ---------------------------------------------------------------- hero
 
 function Hero() {
+  const trust = [
+    ["◐", "Built on MUSD · Mezo"],
+    ["▲", "Stress-tested at −40%"],
+    ["✓", "15 contract tests passing"],
+    ["{}", "Open source, MIT"],
+  ]
   return (
-    <section className="relative overflow-hidden border-b border-line">
-      <div className="dots pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_70%_40%,black,transparent_70%)]" />
-      <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-5 pb-24 pt-20 lg:grid-cols-[1.1fr_1fr]">
-        <div className="animate-rise">
-          <span className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-xs text-muted shadow-card">
-            <span className="h-1.5 w-1.5 rounded-full bg-btc" /> Built on MUSD · Mezo
-          </span>
-          <h1 className="h-display mt-6 text-5xl sm:text-[64px]">
-            Your Bitcoin,
+    <section className="relative overflow-hidden">
+      <div className="mx-auto grid max-w-6xl items-center gap-6 px-5 pb-16 pt-14 lg:grid-cols-[0.95fr_1.05fr] lg:pt-20">
+        <div className="relative z-10 animate-rise">
+          <h1 className="h-display text-[52px] sm:text-[68px]">
+            Promises that
             <br />
-            as a promise<span className="text-btc">.</span>
+            pay themselves.
           </h1>
-          <p className="mt-6 max-w-md text-lg text-muted">
-            Lock BTC in a vault and back a rent guarantee or a trade-credit line. Nothing is borrowed until a promise breaks. Then the vault pays,
-            automatically.
+          <p className="mt-6 max-w-[440px] text-[17px] leading-relaxed text-muted">
+            Par turns undrawn Bitcoin credit into a guarantee you can hand to anyone. Lock BTC in a vault on Mezo, back a rent guarantee or a trade-credit line,
+            and the vault pays the moment a promise breaks.
           </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link href="/vault" className="rounded-full bg-fg px-6 py-3 text-sm font-medium text-white transition hover:bg-black/80">
+          <div className="mt-8 flex flex-wrap items-center gap-2">
+            <Link href="/vault" className="rounded-full bg-fg px-5 py-2.5 text-sm font-medium text-white transition hover:bg-black/80">
               Open a vault
             </Link>
-            <a href="#moves" className="px-3 py-3 text-sm font-medium text-fg hover:text-btc-ink">
-              See how it works →
-            </a>
+            <Link href="/developers" className="inline-flex items-center gap-1 px-4 py-2.5 text-sm font-medium text-btc-ink hover:underline">
+              Read the contracts <Arrow />
+            </Link>
           </div>
-          <div className="mt-12 grid max-w-md grid-cols-3 gap-6 border-t border-line pt-6">
-            {[
-              ["0%", "interest until called"],
-              ["−40%", "BTC crash survived"],
-              ["96.55%", "invoices netted"],
-            ].map(([v, l]) => (
-              <div key={l}>
-                <div className="num text-xl font-medium">{v}</div>
-                <div className="mt-0.5 text-xs text-subtle">{l}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <PayoutCard />
-      </div>
-    </section>
-  )
-}
-
-const STATES = [
-  { tag: "Active", tone: "ok", title: "Guarantee active", line: "No money has moved", amount: "0.00", note: "500 MUSD rent · due in 3d" },
-  { tag: "Due", tone: "muted", title: "Rent due today", line: "Waiting for the tenant", amount: "0.00", note: "Grace period: 3 days" },
-  { tag: "Missed", tone: "warn", title: "Payment missed", line: "Keeper triggers the vault", amount: "500.00", note: "Buffer first, then mint" },
-  { tag: "Paid", tone: "btc", title: "Paid by the vault", line: "Landlord received MUSD", amount: "500.00", note: "Block 1,204,331 · 2.1 s" },
-] as const
-
-/** Animated example: a guarantee going from active → due → missed → paid. */
-function PayoutCard() {
-  const [i, setI] = useState(0)
-  useEffect(() => {
-    const t = setInterval(() => setI((x) => (x + 1) % STATES.length), 2400)
-    return () => clearInterval(t)
-  }, [])
-  const s = STATES[i]
-  const toneCls =
-    s.tone === "ok" ? "bg-ok-wash text-ok" : s.tone === "warn" ? "bg-warn-wash text-warn" : s.tone === "btc" ? "bg-btc-wash text-btc-ink" : "bg-soft text-muted"
-  return (
-    <div className="relative mx-auto w-full max-w-md animate-rise [animation-delay:120ms]">
-      <div className="rounded-2xl border border-line bg-white p-6 shadow-float">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-btc text-sm text-white" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>₿</span>
-            Vault 0x61ef…4296
-          </div>
-          <span key={s.tag} className={`animate-rise rounded-full px-2.5 py-0.5 text-xs font-medium ${toneCls}`}>
-            {s.tag}
-          </span>
-        </div>
-        <div className="mt-6 rounded-xl bg-soft p-4">
-          <div className="text-xs text-muted">{s.title}</div>
-          <div key={s.amount + i} className="num mt-1 animate-rise text-4xl font-medium tracking-tight">
-            {s.amount} <span className="text-sm text-subtle">MUSD</span>
-          </div>
-          <div className="mt-1 text-xs text-subtle">{s.line}</div>
-        </div>
-        <div className="mt-5 space-y-3">
-          {STATES.map((st, k) => (
-            <div key={st.tag} className="flex items-center gap-3 text-sm">
-              <span
-                className={`flex h-5 w-5 items-center justify-center rounded-full border text-[10px] transition ${
-                  k < i ? "border-fg bg-fg text-white" : k === i ? "border-btc bg-btc text-white" : "border-line-strong text-subtle"
-                }`}
-              >
-                {k < i ? "✓" : k + 1}
+          <div className="mt-12 grid max-w-md grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            {trust.map(([i, t]) => (
+              <span key={t} className="flex items-center gap-2 text-muted">
+                <span className="flex h-6 w-6 items-center justify-center rounded-md border border-line bg-white font-mono text-[10px] text-fg">{i}</span>
+                {t}
               </span>
-              <span className={k <= i ? "text-fg" : "text-subtle"}>{st.title}</span>
-              {k === i && <span className="ml-auto text-xs text-muted">{st.note}</span>}
-            </div>
-          ))}
-        </div>
-        <div className="mt-6 flex items-center justify-between border-t border-line pt-4 text-xs text-muted">
-          <span>Backed by 0.25 BTC · holds if BTC falls 58%</span>
-          <span className="num">Example</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------- four moves
-
-const MOVES = [
-  {
-    t: "Lock",
-    d: "Open a vault with BTC. MUSD fixes your borrowing capacity and rate at open. You draw only the 1,800 MUSD minimum, kept as a buffer.",
-    rows: [
-      ["Collateral", "0.25 BTC"],
-      ["Capacity (fixed)", "15,146 MUSD"],
-      ["Rate (locked)", "1.00%"],
-    ],
-  },
-  {
-    t: "Promise",
-    d: "Pledge undrawn capacity: rent, supplier terms, a bond or a trade-credit line. The vault refuses anything that wouldn't survive a 40% BTC drop.",
-    rows: [
-      ["Beneficiary", "landlord"],
-      ["Schedule", "12 × 500 MUSD"],
-      ["Stress test", "passes · 2.2×"],
-    ],
-  },
-  {
-    t: "Miss",
-    d: "If a payment is late past the grace period, anyone can trigger the vault. Our keeper does it within seconds. No one has to approve it.",
-    rows: [
-      ["Due", "1 Dec, 12:00"],
-      ["Grace", "3 days"],
-      ["Trigger", "permissionless"],
-    ],
-  },
-  {
-    t: "Pay",
-    d: "The vault pays from its buffer, then mints the rest from the trove, straight to the beneficiary. In Recovery Mode it tops up collateral first.",
-    rows: [
-      ["From buffer", "500 MUSD"],
-      ["Minted", "0 MUSD"],
-      ["Sent to", "landlord ✓"],
-    ],
-  },
-]
-
-function Moves() {
-  const [i, setI] = useState(0)
-  const [auto, setAuto] = useState(true)
-  useEffect(() => {
-    if (!auto) return
-    const t = setInterval(() => setI((x) => (x + 1) % MOVES.length), 3500)
-    return () => clearInterval(t)
-  }, [auto])
-  const mv = MOVES[i]
-  return (
-    <section id="moves" className="border-b border-line bg-white">
-      <div className="mx-auto max-w-6xl px-5 py-24">
-        <h2 className="h-section">
-          One promise. <span className="text-subtle">Four moves.</span>
-        </h2>
-        <div className="mt-12 grid gap-10 lg:grid-cols-2">
-          <div className="relative">
-            <div className="absolute bottom-3 left-[11px] top-3 w-px bg-line" />
-            {MOVES.map((m, k) => (
-              <button
-                key={m.t}
-                onClick={() => (setI(k), setAuto(false))}
-                className="relative flex w-full gap-5 py-4 text-left"
-              >
-                <span className={`relative z-10 mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-mono text-[10px] transition ${k === i ? "bg-btc text-white" : "border border-line-strong bg-white text-subtle"}`}>
-                  0{k + 1}
-                </span>
-                <span>
-                  <span className={`block text-lg font-medium ${k === i ? "text-fg" : "text-subtle"}`}>{m.t}</span>
-                  {k === i && <span className="mt-1 block max-w-md animate-rise text-sm text-muted">{m.d}</span>}
-                </span>
-              </button>
             ))}
           </div>
-          <div className="flex items-center">
-            <div key={i} className="w-full animate-rise rounded-2xl border border-line bg-canvas p-2">
-              <div className="rounded-xl border border-line bg-white p-6 shadow-card">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{mv.t}</span>
-                  <span className="tag">step 0{i + 1} / 04</span>
-                </div>
-                <div className="mt-5 divide-y divide-line">
-                  {mv.rows.map(([k, v]) => (
-                    <div key={k} className="flex items-center justify-between py-3 text-sm">
-                      <span className="text-muted">{k}</span>
-                      <span className="num">{v}</span>
-                    </div>
-                  ))}
-                </div>
-                <Meter value={((i + 1) / 4) * 100} tone="btc" />
-              </div>
-            </div>
-          </div>
         </div>
+        <GlobeViz />
       </div>
     </section>
   )
@@ -235,144 +105,225 @@ function Moves() {
 // ---------------------------------------------------------------- products
 
 function Products() {
+  const cards = [
+    { n: "#1", t: "Vault", d: "Lock BTC once. Capacity and rate fixed at open.", href: "/vault", ill: <VaultIllustration /> },
+    { n: "#2", t: "Guarantees", d: "Rent and installments that pay themselves when missed.", href: "/vault/new-guarantee", ill: <CertificateIllustration /> },
+    { n: "#3", t: "Bonds", d: "Claims with a challenge window and an arbiter you choose.", href: "/vault/new-guarantee", ill: <ClaimIllustration /> },
+    { n: "#4", t: "Circuit", d: "Trade credit netted onchain. Only net debts settle.", href: "/circuit", ill: <CircuitIllustration /> },
+  ]
   return (
-    <section className="border-b border-line">
-      <div className="mx-auto grid max-w-6xl gap-5 px-5 py-24 lg:grid-cols-2">
-        <Link href="/vault/new-guarantee" className="group rounded-2xl border border-line bg-white p-7 shadow-card transition hover:shadow-float">
-          <div className="tag">Par Guarantees</div>
-          <h3 className="mt-3 text-2xl font-semibold tracking-tight">Rent, supplier terms, bonds.</h3>
-          <p className="mt-2 text-muted">A guarantee with a public certificate. Pays itself when an installment is missed or a claim goes uncontested.</p>
-          <div className="mt-6 divide-y divide-line rounded-xl border border-line">
-            {[
-              ["Month 1", "Paid by tenant", "ok"],
-              ["Month 2", "Covered by vault", "btc"],
-              ["Month 3", "Due in 28 days", "muted"],
-            ].map(([a, b, t]) => (
-              <div key={a} className="flex items-center justify-between px-4 py-3 text-sm">
-                <span className="num">{a} · 500</span>
-                <span className={t === "ok" ? "text-ok" : t === "btc" ? "text-btc-ink" : "text-subtle"}>{b}</span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-6 text-sm font-medium group-hover:text-btc-ink">Make a guarantee →</div>
-        </Link>
-        <Link href="/circuit" className="group rounded-2xl border border-line bg-white p-7 shadow-card transition hover:shadow-float">
-          <div className="tag">Par Circuit</div>
-          <h3 className="mt-3 text-2xl font-semibold tracking-tight">Trade credit that clears itself.</h3>
-          <p className="mt-2 text-muted">Shops that sell to each other log invoices. Only net debts settle, and a defaulter is paid for from their vault.</p>
-          <div className="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-4 rounded-xl border border-line p-5">
-            <div>
-              <div className="text-xs text-muted">Invoiced</div>
-              <div className="num text-3xl font-medium tracking-tight">2,900</div>
-            </div>
-            <span className="text-subtle">→</span>
-            <div className="text-right">
-              <div className="text-xs text-muted">Actually moved</div>
-              <div className="num text-3xl font-medium tracking-tight text-btc-ink">100</div>
-            </div>
-            <div className="col-span-3">
-              <Meter value={96.55} tone="btc" />
-              <div className="mt-1.5 text-xs text-subtle">96.55% netted, proven against the contracts</div>
-            </div>
-          </div>
-          <div className="mt-6 text-sm font-medium group-hover:text-btc-ink">Open Circuit →</div>
-        </Link>
+    <section className="mx-auto max-w-6xl px-5 py-28">
+      <SectionHead title="Four promises." muted="One vault." side="Each works on its own. Together they share one trove, one stress test and one buffer." link={{ href: "/developers", label: "Compare the contracts" }} />
+      <div className="mt-10 grid gap-4 sm:grid-cols-2">
+        {cards.map((c) => (
+          <Link key={c.t} href={c.href} className="group relative flex flex-col items-center rounded-3xl bg-soft px-6 pb-8 pt-6 text-center transition hover:bg-[#EFEFF1]">
+            <span className="absolute right-5 top-4 font-mono text-[11px] text-subtle">{c.n}</span>
+            <div className="h-44 w-full max-w-[300px] transition duration-500 group-hover:-translate-y-1">{c.ill}</div>
+            <h3 className="mt-2 text-lg font-medium tracking-tight">{c.t}</h3>
+            <span className="my-4 h-px w-full max-w-[240px] bg-line-strong/70" />
+            <p className="text-sm text-muted">{c.d}</p>
+            <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-btc-ink">
+              {c.t} <Arrow />
+            </span>
+          </Link>
+        ))}
       </div>
     </section>
   )
 }
 
-// ---------------------------------------------------------------- calculator
+// ---------------------------------------------------------------- proof
 
-function Calculator({ price, stressBps, targetIcr, live }: { price: bigint; stressBps: bigint; targetIcr: bigint; live: boolean }) {
-  const [btc, setBtc] = useState(0.25)
-  const coll = parseEther(String(btc))
-  const pv = openPreview(coll, price, 1800n * E18, stressBps, targetIcr)
-  const drop = maxDrop(coll, pv.debt, pv.maxCover, price)
+function Proof({ price, live, tcr, rate, recovery }: { price: number; live: boolean; tcr?: bigint; rate?: number; recovery?: boolean }) {
   return (
-    <section className="border-b border-line bg-white">
-      <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 py-24 lg:grid-cols-2">
-        <div>
-          <h2 className="h-section">What can your Bitcoin promise?</h2>
-          <p className="mt-3 max-w-md text-muted">
-            {live ? "Live" : "Illustrative"} BTC price {fmtUsd(toNum(price))}. Every promise must still hold if BTC falls {Number(stressBps) / 100}% and all of
-            them are called at once.
-          </p>
+    <section className="border-y border-line bg-white">
+      <div className="mx-auto max-w-6xl px-5 py-28">
+        <h2 className="h-section max-w-3xl">
+          Built on MUSD <span className="text-subtle">— Bitcoin credit that is minted, not borrowed from a pool.</span>
+        </h2>
+        <div className="mt-10 flex flex-wrap gap-x-10 gap-y-3 text-sm text-muted">
+          {["BorrowerOperations", "TroveManager", "PriceFeed", "HintHelpers", "SortedTroves", "Mezo Passport"].map((n) => (
+            <span key={n} className="flex items-center gap-2 font-medium text-fg/70">
+              <span className="h-1.5 w-1.5 rounded-full bg-btc" />
+              {n}
+            </span>
+          ))}
         </div>
-        <div className="rounded-2xl border border-line bg-canvas p-2">
-          <div className="rounded-xl border border-line bg-white p-6 shadow-card">
-            <div className="flex items-end justify-between">
-              <div>
-                <div className="label">You lock</div>
-                <div className="num mt-1 text-2xl font-medium">{btc.toFixed(2)} BTC</div>
-                <div className="text-xs text-subtle">{fmtUsd(toNum(pv.value))}</div>
-              </div>
-              <div className="text-right">
-                <div className="label">You can promise</div>
-                <div className="num mt-1 text-4xl font-medium tracking-tight">{fmtMusd(pv.maxCover, 0)}</div>
-                <div className="text-xs text-subtle">MUSD of cover</div>
-              </div>
-            </div>
-            <input
-              type="range"
-              min={0.05}
-              max={2}
-              step={0.01}
-              value={btc}
-              onChange={(e) => setBtc(Number(e.target.value))}
-              className="mt-6 w-full accent-[#0A0A0B]"
-            />
-            <div className="mt-4 grid grid-cols-3 gap-4 border-t border-line pt-4 text-sm">
-              <div>
-                <div className="text-xs text-subtle">Capacity</div>
-                <div className="num">{fmtMusd(pv.capacity, 0)}</div>
-              </div>
-              <div>
-                <div className="text-xs text-subtle">Buffer</div>
-                <div className="num">1,800</div>
-              </div>
-              <div>
-                <div className="text-xs text-subtle">Holds to</div>
-                <div className="num text-btc-ink">−{fmtPct(drop)}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ---------------------------------------------------------------- closing
-
-function Closing() {
-  return (
-    <section>
-      <div className="mx-auto max-w-6xl px-5 py-24">
-        <div className="grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-3">
+        <div className="mt-12 grid grid-cols-2 border-y border-line md:grid-cols-4">
           {[
-            ["Rate-locked capacity", "A Mezo trove fixes its capacity and rate at open. MUSD is minted, not borrowed from a pool, so no one else can drain your promise."],
-            ["Stress-tested", "Every promise must keep the vault above 160% even after a 40% BTC drop with everything called. The certificate shows the live margin."],
-            ["Recovery Mode ready", "When MUSD restricts new debt, the vault computes the BTC top-up it needs and pays from an idle reserve."],
-          ].map(([t, d]) => (
-            <div key={t} className="bg-white p-6">
-              <div className="font-medium">{t}</div>
-              <p className="mt-2 text-sm text-muted">{d}</p>
+            ["BTC / USD", live ? fmtUsd(price) : "…", live ? "Mezo oracle, live" : "connecting"],
+            ["System TCR", fmtRatio(tcr), recovery ? "Recovery Mode" : "Normal Mode"],
+            ["Rate for new troves", rate !== undefined ? fmtBps(rate) : "…", "fixed for the whole capacity"],
+            ["Netted in tests", "96.55%", "2,900 invoiced · 100 moved"],
+          ].map(([l, v, s], i) => (
+            <div key={l} className={`py-6 ${i % 2 ? "pl-6" : "pr-6"} ${i > 0 ? "md:border-l md:pl-6" : ""} ${i === 1 ? "border-l" : ""} ${i === 3 ? "border-l" : ""} border-line`}>
+              <div className="text-xs text-muted">{l}</div>
+              <div className="num mt-1 text-3xl font-medium tracking-tight">{v}</div>
+              <div className="mt-1 text-xs text-subtle">{s}</div>
             </div>
           ))}
         </div>
-        <div className="mt-16 flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
-          <h2 className="h-section">
-            Make your first promise<span className="text-btc">.</span>
-          </h2>
-          <div className="flex gap-3">
-            <Link href="/vault" className="rounded-full bg-fg px-6 py-3 text-sm font-medium text-white hover:bg-black/80">
-              Open a vault
-            </Link>
-            <a href="https://github.com/linoxbt/par" target="_blank" rel="noreferrer" className="rounded-full border border-line-strong bg-white px-6 py-3 text-sm font-medium hover:border-fg">
-              Read the contracts
-            </a>
+        <div className="mt-10">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-xs text-muted">
+            <span className="flex items-center gap-2">
+              <span className="h-0.5 w-4 bg-btc" /> Vault ratio after every promise is called, as BTC falls
+            </span>
+            <span className="num">example vault · 0.25 BTC · 1,500 MUSD promised</span>
           </div>
+          <StressChart price={price} />
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------- developers
+
+function Developers() {
+  return (
+    <section className="mx-auto grid max-w-6xl items-center gap-14 px-5 py-28 lg:grid-cols-[0.9fr_1.1fr]">
+      <div>
+        <h2 className="h-section">
+          Read it <span className="text-subtle">this afternoon.</span>
+        </h2>
+        <p className="mt-4 max-w-md text-muted">Three small contracts, a keeper and this app. The tests run in a minute, and the same suite runs against the real MUSD system.</p>
+        <div className="mt-8">
+          <CopyChip text="git clone https://github.com/linoxbt/par && cd par/contracts && npm i && npm test" />
+        </div>
+        <ul className="mt-6 space-y-2.5 text-sm">
+          {["15 tests: guarantees, claims, Recovery Mode, Circuit", "One script reruns them against real MUSD contracts", "Keeper and frontend included"].map((t) => (
+            <li key={t} className="flex items-center gap-2.5">
+              <span className="text-ok">✓</span> {t}
+            </li>
+          ))}
+        </ul>
+        <Link href="/developers" className="mt-8 inline-flex items-center gap-1 text-sm font-medium text-btc-ink hover:underline">
+          Read the developer guide <Arrow />
+        </Link>
+      </div>
+      <CodeCard />
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------- scenario (not a testimonial)
+
+function Scenario() {
+  return (
+    <section className="mx-auto max-w-6xl px-5 pb-28">
+      <div className="grid overflow-hidden rounded-3xl border border-line bg-white shadow-card md:grid-cols-[1.25fr_1fr]">
+        <div className="p-8 sm:p-10">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-subtle">Scenario · Lagos rent</span>
+          <p className="mt-5 text-2xl font-medium leading-snug tracking-tight sm:text-[28px]">
+            “Tenants here pay a year of rent upfront. With Par, a little Bitcoin guarantees the months instead, and the landlord gets paid even if I&apos;m late.”
+          </p>
+          <p className="mt-6 text-sm text-muted">An illustrative tenant, not a customer quote. The numbers are the spec&apos;s worked example.</p>
+          <Link href="/vault/new-guarantee" className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-btc-ink hover:underline">
+            Build this guarantee <Arrow />
+          </Link>
+        </div>
+        <div className="grid grid-cols-2 content-center gap-8 bg-soft p-8 sm:p-10">
+          <div className="col-span-2 flex items-center gap-2 text-sm font-medium">
+            <span className="h-2 w-2 rounded-full bg-btc" /> 0.1 BTC at $100,000
+          </div>
+          <div>
+            <div className="num text-5xl font-medium tracking-tight">
+              3<span className="text-xl text-subtle"> mo</span>
+            </div>
+            <div className="mt-2 font-mono text-[10px] uppercase tracking-wider text-subtle">rent guaranteed</div>
+          </div>
+          <div>
+            <div className="num text-5xl font-medium tracking-tight">
+              0<span className="text-xl text-subtle"> MUSD</span>
+            </div>
+            <div className="mt-2 font-mono text-[10px] uppercase tracking-wider text-subtle">borrowed until missed</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------- risk
+
+function Risk() {
+  const cards = [
+    { n: "#1", t: "Stress-tested", d: "Every promise must hold at BTC −40% with everything called.", link: ["Read the risk model", "/security"], ill: <GaugeIllustration /> },
+    { n: "#2", t: "Your vault, your keys", d: "Each vault is your own immutable contract. No admin, no upgrades.", link: ["How vaults work", "/developers#contracts"], ill: <LockIllustration /> },
+    { n: "#3", t: "Recovery Mode ready", d: "When MUSD restricts debt, the vault tops up from a BTC reserve.", link: ["See the waterfall", "/security#waterfall"], ill: <ShieldIllustration /> },
+  ]
+  return (
+    <section className="mx-auto max-w-6xl px-5 pb-28">
+      <SectionHead title="Built to be" muted="boring." side="A guarantee should be the least exciting thing in a tenant's month. Unaudited and on testnet today, and we say so." link={{ href: "/security", label: "Read the security overview" }} />
+      <div className="mt-10 grid gap-4 md:grid-cols-3">
+        {cards.map((c) => (
+          <div key={c.t} className="relative flex flex-col items-center rounded-3xl bg-soft px-6 pb-8 pt-6 text-center">
+            <span className="absolute right-5 top-4 font-mono text-[11px] text-subtle">{c.n}</span>
+            <div className="h-36 w-full max-w-[240px]">{c.ill}</div>
+            <h3 className="mt-2 text-lg font-medium tracking-tight">{c.t}</h3>
+            <span className="my-4 h-px w-full max-w-[200px] bg-line-strong/70" />
+            <p className="text-sm text-muted">{c.d}</p>
+            <Link href={c.link[1]} className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-btc-ink hover:underline">
+              {c.link[0]} <Arrow />
+            </Link>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------- faq
+
+const FAQ = [
+  ["Isn't this just Aave credit delegation?", "No. On Aave the rate floats and the pool can be fully borrowed by others right when a claim arrives. MUSD is minted, not pooled, and a Mezo trove locks its rate across its whole capacity at open. A Par promise depends only on your own Bitcoin."],
+  ["What happens if Bitcoin crashes?", "Every promise must survive a 40% drop with every promise called and the vault still above 160%. Past that the vault can't make new promises and the owner is alerted. Far enough to hit liquidation, a guarantee can fail, and the certificate shows exactly how far that is."],
+  ["What about Recovery Mode?", "In Recovery Mode MUSD only allows new debt with a collateral top-up that improves the ratio. The vault computes the BTC it needs, pays from an idle reserve, and if the reserve is short the keeper alerts the owner and retries."],
+  ["Who decides disputed claims?", "For installments nobody: the contract sees whether the payment arrived. For bonds there's a challenge window, and only disputed claims go to an arbiter both sides agreed on."],
+  ["Why does a vault borrow 1,800 MUSD at the start?", "It's MUSD's minimum loan. Par keeps it in the vault as a buffer that pays the first claims without new debt."],
+]
+
+function Faq() {
+  return (
+    <section className="mx-auto grid max-w-6xl gap-12 px-5 pb-28 lg:grid-cols-[0.8fr_1.2fr]">
+      <div>
+        <h2 className="h-section">
+          Questions, <span className="text-subtle">answered.</span>
+        </h2>
+        <Link href="/security" className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-btc-ink hover:underline">
+          Read the risk model <Arrow />
+        </Link>
+      </div>
+      <div className="divide-y divide-line border-t border-line">
+        {FAQ.map(([q, a], i) => (
+          <details key={q} className="group py-5" open={i === 0}>
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">
+              {q}
+              <span className="text-subtle transition group-open:rotate-180">⌄</span>
+            </summary>
+            <p className="mt-3 text-sm leading-relaxed text-muted">{a}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function Closing() {
+  return (
+    <section className="relative h-[420px] overflow-hidden">
+      <GlyphRain />
+      <div className="relative z-10 flex h-full flex-col items-center justify-center px-5 text-center">
+        <h2 className="h-display text-4xl sm:text-6xl">
+          Ready when <span className="text-subtle">your promise is.</span>
+        </h2>
+        <div className="mt-8 flex gap-2">
+          <Link href="/vault" className="rounded-full bg-fg px-5 py-2.5 text-sm font-medium text-white hover:bg-black/80">
+            Open a vault
+          </Link>
+          <Link href="/circuit" className="rounded-full bg-soft px-5 py-2.5 text-sm font-medium hover:bg-line">
+            Explore Circuit
+          </Link>
         </div>
       </div>
     </section>

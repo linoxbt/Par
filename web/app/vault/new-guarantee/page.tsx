@@ -75,7 +75,7 @@ function Builder() {
     }
   })
 
-  const Head = <PageHead eyebrow="Guarantee" title="Make a promise" sub="Every promise is stress-tested before it exists: BTC −40%, everything called at once, vault still above 160%." />
+  const Head = <PageHead eyebrow="Guarantee" title="Make a promise." muted="Stress-tested before it exists." sub="BTC −40%, everything called at once, vault still above 160%." />
   if (!CONFIGURED)
     return (
       <div className="flex flex-col gap-8">

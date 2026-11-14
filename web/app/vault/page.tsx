@@ -34,7 +34,7 @@ function VaultInner() {
   if (!CONFIGURED)
     return (
       <div className="flex flex-col gap-8">
-        <PageHead eyebrow="Vault" title="Your vault" sub="Lock BTC once, back many promises." />
+        <PageHead eyebrow="Vault" title="Your vault." muted="Lock BTC once, back many promises." />
         <NotDeployed />
         <Steps active={0} />
       </div>
@@ -42,7 +42,7 @@ function VaultInner() {
   if (!isConnected)
     return (
       <div className="flex flex-col gap-8">
-        <PageHead eyebrow="Vault" title="Your vault" sub="Lock BTC once, back many promises." />
+        <PageHead eyebrow="Vault" title="Your vault." muted="Lock BTC once, back many promises." />
         <Card className="flex flex-col items-center gap-4 py-14 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-btc text-xl text-white" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>₿</span>
           <div className="text-lg font-medium">Connect a wallet to open your vault</div>

@@ -21,13 +21,16 @@ export function CardTitle({ children, sub, right }: { index?: string; children: 
   )
 }
 
-export function PageHead({ eyebrow, title, sub, right }: { index?: string; eyebrow?: string; title: React.ReactNode; sub?: React.ReactNode; right?: React.ReactNode }) {
+export function PageHead({ eyebrow, title, muted, sub, right }: { index?: string; eyebrow?: string; title: React.ReactNode; muted?: string; sub?: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="max-w-2xl">
         {eyebrow && <div className="tag mb-2">{eyebrow}</div>}
-        <h1 className="h-display text-3xl sm:text-4xl">{title}</h1>
-        {sub && <p className="mt-2 text-muted">{sub}</p>}
+        <h1 className="h-display text-4xl sm:text-[44px]">
+          {title}
+          {muted && <span className="text-subtle"> {muted}</span>}
+        </h1>
+        {sub && <p className="mt-3 text-muted">{sub}</p>}
       </div>
       {right}
     </div>

@@ -181,11 +181,14 @@ npm install && npm start
 | `/circuit/[circle]` | Circuit board: member graph, invoice edges, gross / owed / efficiency meter, cycle countdown, **Clear cycle** animation (browser-side cycle cancellation ending on "2,900 cleared · 100 moved · 96.55% netted"), settle / force-settle / claim, admin add-member |
 | `/circuit/[circle]/invoice` | Create, accept, reject |
 
-Design: light "infrastructure" look: off-white canvas, white cards with hairline borders, Geist and Geist Mono,
-black pill actions and Bitcoin orange as the single accent. The landing is five sections (animated payout card,
-the four moves, the two products, a live cover calculator, closing). The direction takes cues from the
-[Weir](https://www.framer.com/marketplace/templates/weir/) Framer template's style; no template assets, images or
-copy are used.
+Design: the site follows the structure of the [Weir](https://www.framer.com/marketplace/templates/weir/) Framer
+template (floating pill nav; hero with a live data visualisation; a sticky "four moves" scroll story with an
+interactive card; numbered product cards; proof stats with an interactive chart; a developer code card; security
+cards; two-column FAQ; glyph-rain CTA; footer with a giant wordmark; separate Developers and Security pages). All
+artwork, copy and data are Par's own: a dotted Bitcoin globe routing payouts, the Lock → Promise → Miss → Pay
+story with a typed BTC amount, a stress curve from the real health math, real contract calls. Light canvas,
+Geist + Geist Mono, Bitcoin orange as the single accent. No template assets, images or copy are used, and the
+testimonial slot is a clearly labelled scenario rather than an invented quote.
 
 Wallets: Mezo Passport (`getConfig`, Xverse / Unisat / OKX + EVM wallets). With a BTC wallet Passport routes
 transactions through a smart account on Mezo, which becomes the vault owner. `NEXT_PUBLIC_CHAIN=local` uses
