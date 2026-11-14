@@ -72,6 +72,8 @@ function makeAppKitConfig(): Config {
       url: typeof window !== "undefined" ? window.location.origin : "https://par-rosy.vercel.app",
       icons: [typeof window !== "undefined" ? `${window.location.origin}/icon.svg` : "https://par-rosy.vercel.app/icon.svg"],
     },
+    // No Coinbase SDK: it phones home (cca-lite.coinbase.com) and sets storage on load.
+    enableCoinbase: false,
     features: { analytics: false, email: false, socials: false, swaps: false, onramp: false, send: false, history: false },
     themeMode: "light",
     themeVariables: {

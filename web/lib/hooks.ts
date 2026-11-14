@@ -77,31 +77,8 @@ export function useProtocol() {
   }
 }
 
-export function useMarket() {
-  const p = useProtocol()
-  const { data: price } = useReadContract({
-    address: p?.priceFeed,
-    abi: priceFeedAbi,
-    functionName: "fetchPrice",
-    query: { enabled: !!p, refetchInterval: 15_000 },
-  })
-  const { data } = useReadContracts({
-    contracts: [
-      { address: p?.troveManager, abi: troveManagerAbi, functionName: "getTCR", args: [price ?? 0n] },
-      { address: p?.troveManager, abi: troveManagerAbi, functionName: "checkRecoveryMode", args: [price ?? 0n] },
-      { address: p?.borrowerOps, abi: borrowerOpsAbi, functionName: "minNetDebt" },
-      { address: p?.interestRateManager, abi: interestRateManagerAbi, functionName: "interestRate" },
-    ],
-    query: { enabled: !!p && price !== undefined, refetchInterval: 30_000 },
-  })
-  return {
-    price,
-    tcr: data?.[0]?.result as bigint | undefined,
-    recoveryMode: data?.[1]?.result as boolean | undefined,
-    minNetDebt: (data?.[2]?.result as bigint | undefined) ?? 1800n * 10n ** 18n,
-    globalRate: data?.[3]?.result as number | undefined,
-  }
-}
+/** Market data now comes from a plain viem client (lib/market.ts) shared with the marketing pages. */
+export { useMarket } from "./market"
 
 export function useVaultsOf(owner?: Address) {
   const { data: count, refetch } = useReadContract({

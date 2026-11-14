@@ -2,7 +2,8 @@
 
 import Link from "next/link"
 import { fmtBps, fmtRatio, fmtUsd, toNum } from "@/lib/format"
-import { useMarket } from "@/lib/hooks"
+import { useMarket } from "@/lib/market"
+import { Footer } from "@/components/Footer"
 import { GlobeViz } from "@/components/landing/GlobeViz"
 import { Story } from "@/components/landing/Story"
 import { StressChart } from "@/components/landing/StressChart"
@@ -33,6 +34,7 @@ export default function Landing() {
       <Risk />
       <Faq />
       <Closing />
+      <Footer />
     </div>
   )
 }

@@ -1,9 +1,5 @@
-"use client"
-
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { Providers } from "./providers"
-import { Header, Logo } from "@/components/Header"
+import { Logo } from "@/components/Header"
 
 const COLS: [string, [string, string][]][] = [
   ["Product", [["Vault", "/vault"], ["Guarantees", "/vault/new-guarantee"], ["Circuit", "/circuit"], ["Docs", "/docs"]]],
@@ -11,7 +7,8 @@ const COLS: [string, [string, string][]][] = [
   ["Legal", [["Terms of use", "/terms"], ["Privacy policy", "/privacy"], ["Cookie policy", "/cookies"], ["MUSD docs", "https://mezo.org/docs/developers/musd"]]],
 ]
 
-function Footer() {
+/** Site footer. Rendered by the landing page only. */
+export function Footer() {
   return (
     <footer className="overflow-hidden border-t border-line bg-white">
       <div className="mx-auto grid max-w-6xl grid-cols-2 gap-x-6 gap-y-10 px-5 pb-10 pt-14 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
@@ -49,17 +46,3 @@ function Footer() {
   )
 }
 
-const FULL = ["/", "/developers", "/security", "/docs", "/terms", "/privacy", "/cookies"]
-
-export function Shell({ children }: { children: React.ReactNode }) {
-  const path = usePathname()
-  return (
-    <Providers>
-      <div className="flex min-h-screen flex-col">
-        <Header />
-        {FULL.includes(path) ? <main className="flex-1">{children}</main> : <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-5 sm:py-12">{children}</main>}
-        {path === "/" && <Footer />}
-      </div>
-    </Providers>
-  )
-}

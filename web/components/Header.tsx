@@ -3,8 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
-import { WalletButton } from "@/components/Wallet"
-import { useMarket } from "@/lib/hooks"
+import { useMarket } from "@/lib/market"
 import { fmtRatio, fmtUsd, toNum } from "@/lib/format"
 
 /** Par mark: a coin split into two equal halves ("at par"): locked BTC above, the payment it backs below. */
@@ -52,13 +51,22 @@ function ProductsMenu() {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false)
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false)
     document.addEventListener("mousedown", close)
-    return () => document.removeEventListener("mousedown", close)
+    document.addEventListener("keydown", esc)
+    return () => {
+      document.removeEventListener("mousedown", close)
+      document.removeEventListener("keydown", esc)
+    }
   }, [])
   return (
     <div ref={ref} className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-sm text-fg/80 hover:text-fg">
-        Products <span className={`text-[10px] transition ${open ? "rotate-180" : ""}`}>▾</span>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex items-center gap-1 rounded-full px-3 py-1.5 text-sm text-fg/80 hover:text-fg">
+        Products <span aria-hidden className={`text-[10px] transition ${open ? "rotate-180" : ""}`}>▾</span>
       </button>
       {open && (
         <div className="absolute left-0 top-full pt-2">
@@ -79,8 +87,6 @@ function ProductsMenu() {
   )
 }
 
-const MARKETING = ["/", "/developers", "/security", "/docs", "/terms", "/privacy", "/cookies"]
-
 const MOBILE_LINKS: [string, string][] = [
   ["/vault", "Vault"],
   ["/vault/new-guarantee", "Guarantees"],
@@ -90,15 +96,21 @@ const MOBILE_LINKS: [string, string][] = [
   ["/security", "Security"],
 ]
 
-function Wallet({ align = "right" }: { align?: "left" | "right" }) {
-  return <WalletButton size="sm" align={align} />
-}
-
-export function Header() {
+/**
+ * Site header. Marketing, docs and legal pages render it without a wallet (server-rendered, no wallet
+ * stack). App routes pass their wallet button in, which also switches the right side to live status.
+ */
+export function Header({ wallet }: { wallet?: React.ReactNode }) {
   const path = usePathname()
-  const marketing = MARKETING.includes(path)
+  const app = wallet !== undefined
   const [open, setOpen] = useState(false)
   useEffect(() => setOpen(false), [path])
+  useEffect(() => {
+    if (!open) return
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false)
+    document.addEventListener("keydown", esc)
+    return () => document.removeEventListener("keydown", esc)
+  }, [open])
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : ""
     return () => {
@@ -125,7 +137,7 @@ export function Header() {
           </nav>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {marketing ? (
+          {!app ? (
             <>
               <Link href="/vault/new-guarantee" className="hidden rounded-full px-4 py-2 text-sm text-fg/80 hover:text-fg lg:block">
                 Make a guarantee
@@ -137,7 +149,7 @@ export function Header() {
           ) : (
             <>
               <LiveStatus />
-              <Wallet />
+              {wallet}
             </>
           )}
           <button
@@ -164,12 +176,18 @@ export function Header() {
                 className={`flex items-center justify-between rounded-2xl px-4 py-3.5 text-[17px] ${path === href ? "bg-soft font-medium" : ""}`}
               >
                 {label}
-                <span className="text-subtle">›</span>
+                <span aria-hidden className="text-subtle">›</span>
               </Link>
             ))}
             <div className="mt-2 flex items-center justify-between gap-3 border-t border-line px-2 pb-1 pt-3">
               <MobileStatus />
-              <Wallet />
+              {app ? (
+                wallet
+              ) : (
+                <Link href="/vault" className="rounded-full bg-fg px-4 py-2 text-sm font-medium text-white">
+                  Open app
+                </Link>
+              )}
             </div>
           </nav>
         </div>
