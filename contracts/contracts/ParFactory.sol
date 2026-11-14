@@ -26,8 +26,13 @@ contract ParFactory {
     event VaultOwnerChanged(address indexed vault, address indexed from, address indexed to);
 
     error NotVault();
+    error BadImplementation();
 
+    /// @param _implementation A ParVault deployed in its own transaction (so explorers index and
+    ///        verify it). It must be locked: its constructor sets factory = itself, which makes
+    ///        initialize() revert on the implementation, so it can never be taken over.
     constructor(
+        ParVault _implementation,
         IBorrowerOperations _bo,
         ITroveManager _tm,
         IPriceFeed _pf,
@@ -35,7 +40,10 @@ contract ParFactory {
         uint256 _stressBps,
         uint256 _targetIcr
     ) {
-        implementation = address(new ParVault());
+        if (address(_implementation).code.length == 0 || _implementation.factory() != address(_implementation)) {
+            revert BadImplementation();
+        }
+        implementation = address(_implementation);
         borrowerOps = _bo;
         troveManager = _tm;
         priceFeed = _pf;

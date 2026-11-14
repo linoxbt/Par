@@ -53,6 +53,7 @@ describe("Par", () => {
 
     const F = await ethers.getContractFactory("ParFactory")
     factory = await F.deploy(
+      await (await (await ethers.getContractFactory("ParVault")).deploy()).getAddress(),
       await contracts.borrowerOperations.getAddress(),
       await contracts.troveManager.getAddress(),
       await contracts.priceFeed.getAddress(),

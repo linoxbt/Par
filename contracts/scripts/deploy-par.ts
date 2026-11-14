@@ -19,8 +19,13 @@ async function main() {
   const [deployer] = await ethers.getSigners()
   console.log("deployer", deployer.address, "chainId", chainId)
 
+  // The vault implementation is deployed in its own transaction so the explorer indexes (and can
+  // verify) it; the factory checks that it is locked before cloning it.
+  const impl = await (await ethers.getContractFactory("ParVault")).deploy()
+  await impl.waitForDeployment()
+  console.log("ParVault implementation", await impl.getAddress())
   const Factory = await ethers.getContractFactory("ParFactory")
-  const factory = await Factory.deploy(A.BorrowerOperations, A.TroveManager, A.PriceFeed, A.MUSD, STRESS_BPS, TARGET_ICR)
+  const factory = await Factory.deploy(await impl.getAddress(), A.BorrowerOperations, A.TroveManager, A.PriceFeed, A.MUSD, STRESS_BPS, TARGET_ICR)
   await factory.waitForDeployment()
   const factoryBlock = (await factory.deploymentTransaction()!.wait())!.blockNumber
   console.log("ParFactory", await factory.getAddress(), "block", factoryBlock)

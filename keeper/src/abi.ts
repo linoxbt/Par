@@ -4,6 +4,11 @@ export const parFactoryAbi = [
   {
     "inputs": [
       {
+        "internalType": "contract ParVault",
+        "name": "_implementation",
+        "type": "address"
+      },
+      {
         "internalType": "contract IBorrowerOperations",
         "name": "_bo",
         "type": "address"
@@ -36,6 +41,11 @@ export const parFactoryAbi = [
     ],
     "stateMutability": "nonpayable",
     "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "BadImplementation",
+    "type": "error"
   },
   {
     "inputs": [],

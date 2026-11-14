@@ -13,6 +13,7 @@ async function main() {
   const system = await (await ethers.getContractFactory("MockMUSDSystem")).deploy(await priceFeed.getAddress())
   const musd = await system.musd()
   const factory = await (await ethers.getContractFactory("ParFactory")).deploy(
+    await (await (await ethers.getContractFactory("ParVault")).deploy()).getAddress(),
     await system.getAddress(),
     await system.getAddress(),
     await priceFeed.getAddress(),

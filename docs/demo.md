@@ -1,13 +1,13 @@
 # Demo (2 minutes 30)
 
-Demo parameters: installment period 120 s, grace 10 s, Circuit cycle 180 s, settle window 60 s.
+Demo parameters: installment period 120 s, grace 10 s, Circuit cycle 600 s (10 min), settle window 60 s. Circle members join by invite: the admin invites, each shop joins with its own vault and clearing line.
 Pre-create the Circuit vaults and lines before recording (`contracts/scripts/seed-demo.ts`), then do the
 guarantee live. Keep the keeper running with `INTERVAL_MS=15000`.
 
 | Time | Screen | Say |
 | ---- | ------ | --- |
 | 0:00 | Landing | "In Lagos you pay one to two years of rent upfront. Merchants lock cash as deposits. Businesses run on IOUs that break when one person defaults. All of that is idle money." |
-| 0:15 | `/vault`: connect Xverse through Passport, open vault with 0.1 BTC | "I lock Bitcoin in a Par vault on Mezo. I haven't borrowed anything beyond the minimum. This is undrawn MUSD capacity, at a locked rate." |
+| 0:15 | `/vault`: connect Xverse through Passport, open vault with 0.15 BTC (at ~$65k BTC; 0.1 BTC only covers ~450 MUSD) | "I lock Bitcoin in a Par vault on Mezo. I haven't borrowed anything beyond the minimum. This is undrawn MUSD capacity, at a locked rate." |
 | 0:35 | `/vault/new-guarantee`: 12 × 500 MUSD, cover 1,500, schedule "Demo (2 min)" | "I promise my landlord three months of rent. The vault checks that the promise survives a 40% Bitcoin crash before it lets me make it." |
 | 0:55 | Phone: `/c/[vault]/[id]` | "This is what the landlord sees: guaranteed, covered even if BTC falls 45%, and no money has moved." |
 | 1:10 | `/pay/[vault]/[id]`: pay month 1, then let month 2 lapse (countdown on the certificate) | "Month two, I don't pay." |

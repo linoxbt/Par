@@ -64,6 +64,7 @@ describe("Par audit regressions", () => {
   beforeEach(async () => {
     ;({ alice, bob, carol, dennis, eric, whale, deployer, contracts } = await setupTests())
     factory = await (await ethers.getContractFactory("ParFactory")).deploy(
+      await (await (await ethers.getContractFactory("ParVault")).deploy()).getAddress(),
       await contracts.borrowerOperations.getAddress(),
       await contracts.troveManager.getAddress(),
       await contracts.priceFeed.getAddress(),
@@ -591,6 +592,24 @@ describe("Par audit regressions", () => {
     // the old owner can no longer take on obligations against the transferred vault
     await circuit.connect(bob.wallet).createInvoice(0, alice.address, to1e18("10"), ethers.id("x"))
     await expect(circuit.connect(alice.wallet).acceptInvoice(0)).to.be.revertedWithCustomError(circuit, "NotMember")
+  })
+
+  it("factory only accepts a deployed, locked ParVault implementation", async () => {
+    const F = await ethers.getContractFactory("ParFactory")
+    const args = [
+      await contracts.borrowerOperations.getAddress(),
+      await contracts.troveManager.getAddress(),
+      await contracts.priceFeed.getAddress(),
+      await contracts.musd.getAddress(),
+      STRESS_BPS,
+      TARGET_ICR,
+    ] as const
+    await expect(F.deploy(alice.address, ...args)).to.be.reverted // no code
+    // a clone is a ParVault whose factory is not itself (unlocked) -> rejected
+    const v = await newVault(alice, to1e18("1"), to1e18("2000"))
+    await expect(F.deploy(await v.getAddress(), ...args)).to.be.revertedWithCustomError(F, "BadImplementation")
+    const impl = await ethers.getContractAt("ParVault", await factory.implementation())
+    expect(await impl.factory()).to.equal(await impl.getAddress())
   })
 
   it("only vaults cloned by the Par factory can back a clearing line (no look-alike contracts)", async () => {

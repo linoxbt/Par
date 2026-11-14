@@ -4,13 +4,14 @@
 
 A Par vault owns a MUSD trove. The owner reserves part of the trove's *undrawn* borrowing capacity against
 **commitments**: rent guarantees, supplier terms, performance bonds, or a credit line pledged to a trade
-network. Nothing is borrowed and no interest is paid on a commitment until it's called. When a promise
-breaks, the vault mints MUSD straight to whoever is owed.
+network. Commitments draw nothing until they are called (the vault does draw MUSD's 1,800 MUSD minimum once,
+at open, and keeps it as a liquid buffer). When a promise breaks, the vault pays whoever is owed: from that
+buffer first, then by minting MUSD from the trove.
 
 > "Your Bitcoin becomes a promise you can hand to anyone, from one landlord to a whole trade network.
 > It costs nothing until someone needs it."
 
-Live URL · Video · Testnet addresses: *see [Deployments](#contracts) (fill in after `deploy-par.ts`)*
+**Live:** https://par-rosy.vercel.app · **Docs:** https://par-rosy.vercel.app/docs · **Testnet addresses:** [below](#contracts) · **Keeper:** Railway (`par-keeper`)
 
 ---
 
@@ -85,11 +86,12 @@ docs/demo.md           2:30 demo script and judge Q&A
 
 | Contract                | Testnet (matsnet, 31611) |
 | ----------------------- | ------------------------ |
-| ParFactory              | [`0x383795B16eFc89E27ab9785b283061C76eF30297`](https://explorer.test.mezo.org/address/0x383795B16eFc89E27ab9785b283061C76eF30297#code) (verified) |
-| ParVault implementation | [`0xc8a1BcFfb39B1D9DAC0c8AF88ccF79c939164409`](https://explorer.test.mezo.org/address/0xc8a1BcFfb39B1D9DAC0c8AF88ccF79c939164409) |
-| ParCircuit              | [`0xF14835BF078E532e9743F7e8346174b5F2910Ec2`](https://explorer.test.mezo.org/address/0xF14835BF078E532e9743F7e8346174b5F2910Ec2#code) (verified) |
+| ParFactory              | [`0xF524D872920424004fAa40D2B037aE3e70CC3040`](https://explorer.test.mezo.org/address/0xF524D872920424004fAa40D2B037aE3e70CC3040#code) (verified) |
+| ParVault implementation | [`0x7e8447dE613c0565aB049cbD76583CABaaA29797`](https://explorer.test.mezo.org/address/0x7e8447dE613c0565aB049cbD76583CABaaA29797#code) (verified) |
+| ParCircuit              | [`0x02cE73fDb14c8669E8b1A2F422148f8ee7fc5982`](https://explorer.test.mezo.org/address/0x02cE73fDb14c8669E8b1A2F422148f8ee7fc5982#code) (verified) |
 
-Deployed at block 16,777,736 (see `contracts/deployments/matsnet.json`).
+Deployed at block 16,782,238 (see `contracts/deployments/matsnet.json`). This is the post-audit deployment; the
+first deployment (`0x3837…0297` / `0xF148…0Ec2`) is superseded and should not be used.
 
 Par integrates with the official MUSD deployment (`@mezo-org/musd-contracts@1.1.0`):
 BorrowerOperations `0xCdF7028ceAB81fA0C6971208e83fa7872994beE5`, TroveManager
@@ -102,52 +104,43 @@ Demo risk parameters: `stressBps = 4000` (survive a 40% BTC drop), `targetIcr = 
 
 ```bash
 cd contracts
-cp .env.example .env            # MATSNET_PRIVATE_KEY=0x… funded from https://faucet.test.mezo.org
+cp .env.example .env            # MATSNET_PRIVATE_KEY=0x… (a key funded with testnet BTC)
 npm install
-npm run deploy:matsnet          # prints ParFactory, ParVault implementation, ParCircuit + env lines
-                                # and writes deployments/matsnet.json
+npm run deploy:matsnet          # deploys the ParVault implementation, ParFactory(impl, …) and ParCircuit(factory),
+                                # refuses to run if the RPC chainId doesn't match, writes deployments/matsnet.json
+node scripts/export-abis.js     # refreshes web/lib/abi.ts, keeper/src/abi.ts and web/lib/deployments.ts
 # optional: pre-create the Circuit demo (needs MATSNET_DEMO_KEYS with three funded keys)
 npx hardhat run scripts/seed-demo.ts --network matsnet
 ```
 
-Verify on Blockscout (`explorer.test.mezo.org`) with "Solidity (Standard JSON input)" from
-`artifacts/build-info/*.json`, compiler 0.8.24, EVM london — for ParFactory, ParCircuit and the ParVault
-implementation. Or `npx hardhat verify --network matsnet <address> <args…>`.
+Verify with `npx hardhat verify --network matsnet <address> <args…>`: the implementation takes no args, the
+factory takes `(implementation, BorrowerOperations, TroveManager, PriceFeed, MUSD, 4000, 1600000000000000000)`,
+the circuit takes `(factory)`. The implementation is deployed in its own transaction precisely so the explorer
+indexes and verifies it (Mezo's explorer doesn't index contracts created inside another transaction).
 
 ## Tests
 
 ```bash
-cd contracts && npm install && npm test        # 15 passing (mock MUSD system)
-./scripts/run-musd-integration.sh              # same suite against the REAL MUSD contracts
+cd contracts && npm install && npm test        # 41 passing (mock MUSD system)
+./scripts/run-musd-integration.sh              # Par.test.ts against the REAL MUSD contracts (see below)
 ```
 
-**Two layers, stated plainly:**
-
-- `npm test` runs against `MockMUSDSystem`, a compact model of the MUSD rules Par depends on (capacity
-  snapshot and min-on-withdraw, capacity check on every draw, Normal Mode ICR ≥ 110% / TCR ≥ 150%, Recovery
-  Mode top-up rule with no borrowing fee, 200 MUSD gas comp, 0.1% fee, 1,800 min net debt, simple interest on
-  principal). It does not model liquidation, redemption or sorted-list hints. **15/15 passing.**
-- `run-musd-integration.sh` clones `mezo-org/musd`, copies Par into `solidity/contracts/par`, and runs the
-  *same* `test/Par.test.ts` (through `integration/helpers.ts`, which re-exports the MUSD repo's own fixtures:
-  real BorrowerOperations, TroveManager, PriceFeed with MockAggregator at $50,000). Output goes to
-  `contracts/integration/last-run.txt` — commit that file as evidence when you submit.
-
-| Test | Proves |
-| ---- | ------ |
-| rent guarantee: missed installment is paid from buffer, then minted from the trove | Waterfall order, debt only rises when the buffer runs out, double/early triggers revert, reserved accounting |
-| rejects a commitment that would not survive the stress test | `health(cap)` gate |
-| owner cannot pull collateral out from under live commitments | Irrevocability (I3, I5) |
-| discretionary claim: undisputed claim executes after the challenge window | Claim lifecycle |
-| recovery mode: draw needs a BTC top-up from the vault's idle reserve | Reverts with the BTC needed, pays after funding |
-| Circuit: 2,900 MUSD of invoices settle with 100 MUSD, defaulter is force-settled | Netting math (9,655 bps), OverLimit, forceSettle draws the line, creditor claim |
-| dispute path | `resolveClaim(false)` leaves the cap intact; `resolveClaim(true)` pays; late dispute reverts |
-| closeCommitment | Beneficiary early release, anyone after expiry, then `closeTrove` returns all BTC |
-| open claim blocks closing after expiry | Until resolved |
-| interest accrual over 30 days | Spec worked example (0.1 BTC @ $100k) stays healthy; extra cover beyond ~1,746 MUSD is rejected |
-| Circuit: previous-cycle unsettled amounts count toward the line limit | And free up after `settle` |
-| stale invoices / reject | `WrongCycle`, either party can reject |
-| access control | Only the circuit draws a line; `addMember` checks owner and line target; clones init once; implementation locked |
-| payInstallment | Settles an index once; cover cap ≤ installment × count |
+- `test/Par.test.ts` (15): the core flows — waterfall, stress-test gate, irrevocability, claims and disputes,
+  Recovery Mode top-up, Circuit netting (2,900 → 100 MUSD, 9,655 bps) and force-settle, close/release,
+  interest accrual, stale invoices, access control, clone locking.
+- `test/Audit.test.ts` (26): one regression per audit finding, each written as the original proof of concept
+  inverted, plus a **400-step seeded random sequence** asserting the reserve invariant
+  `reserved == Σ(cap − paidOut)` over active commitments after every step; multi-circle and keeper-lag cases;
+  cycle finalisation and pro-rata claims; Normal-Mode CCR top-up; liquidation + `claimCollateral`; arbiter
+  deadline; ownership transfer; consent-based membership; factory-only vaults and a locked implementation.
+- `MockMUSDSystem` models the MUSD rules Par depends on (capacity snapshot, Normal Mode ICR ≥ 110% / TCR ≥ 150%,
+  Recovery Mode top-up rule, 200 MUSD gas comp, 0.1% fee, 1,800 min debt, interest, liquidation with a
+  collateral surplus). It does not model redemption or sorted-list hint validation.
+- **Real MUSD.** `run-musd-integration.sh` runs `Par.test.ts` inside a clone of `mezo-org/musd` against the
+  real BorrowerOperations/TroveManager/PriceFeed; it writes `contracts/integration/last-run.txt`. Live
+  evidence on testnet: circle 0 of the first deployment (real MUSD) netted 2,900 MUSD of invoices to 100 and
+  the keeper force-settled the defaulter on its own
+  ([tx](https://explorer.test.mezo.org/tx/0xb0c93cd4d09bc43ee391aa2fe7cd73d65b78781ed956f86b65f0419aa511a159)).
 
 ## Run locally
 
@@ -205,32 +198,52 @@ Indexing: no hosted indexer. Vaults come from `ParFactory.vaultsOf/allVaults`, c
 
 | Job | Condition | Call |
 | --- | --------- | ---- |
-| Missed installments | Active Scheduled, index unsettled, now > due + grace, now ≤ expiry | `vault.triggerMissed(id, i, up, lo)` |
-| Claims | Open, undisputed, now > filedAt + window | `vault.executeClaim(id, up, lo)` |
-| Circuit | now ≥ close + settleWindow, net < 0, not settled | `circuit.forceSettle(c, cyc, debtor, up, lo)` |
-| Health watch | `health(0).ok == false` | Alert (log + optional `ALERT_WEBHOOK_URL`) |
-| Recovery Mode | revert `RecoveryModeNeedsReserve(b)` | Alert with `b`, retry next tick |
+| Missed installments | Active Scheduled, index unsettled, now > due + grace, before expiry | `vault.triggerMissed(id, i, up, lo)` |
+| Claims | Open and undisputed past the challenge window, or disputed past the 7-day arbiter deadline | `vault.executeClaim(id, up, lo)` |
+| Circuit | Member line has `outstanding > 0`; walk back to each unsettled negative net past its settle window | `circuit.forceSettle(c, cyc, debtor, up, lo)` |
+| Expired commitments | Past expiry, no open claim (frees capacity) | `vault.closeCommitment(id)` |
+| Health watch | `health(0).ok == false`, or trove inactive | Alert on change, then every `ALERT_COOLDOWN_MS` |
+| Recovery Mode | revert `RecoveryModeNeedsReserve(b)` (decoded across all Par ABIs) | Alert with `b`, the vault and its owner; retry |
+| Keeper itself | balance < `LOW_BALANCE_BTC`; a job failing `MAX_RETRIES` times | Alert |
 
-Every call is simulated first; hints come from HintHelpers/SortedTroves (zero hints as a fallback). Uses chain
-time.
+Every call is simulated first; pending transactions are tracked so a slow receipt never causes a resend; one
+failing debtor never blocks others; nothing is persisted and nothing is skipped after downtime. Alerts go to the
+log and, when configured, Telegram (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) and/or a JSON webhook
+(`ALERT_WEBHOOK_URL`). Heartbeat log every 5 min; a tick stuck for 10 min exits the process so the platform
+restarts it.
 
-**Running on Railway** (project `par-keeper`, service `keeper`): built from `keeper/Dockerfile` on this repo's
-branch, restart policy ALWAYS, scanning every 15 s as `0x7134feafbe2f37927114C26520c32F7fCD379c04`. Variables:
-`CHAIN=testnet`, `RPC_URL`, `FACTORY`, `CIRCUIT`, `INTERVAL_MS`, and `KEEPER_KEY` (secret, set in Railway only).
-Keep that address topped up with testnet BTC for gas.
+**Running on Railway** (project `par-keeper`, service `keeper`): built from `keeper/Dockerfile` (pinned Node 20
+Alpine, tini, non-root) on the `main` branch, restart policy ALWAYS, every 15 s, with a **dedicated keeper key**
+that only holds gas money (not the deployer or circle-admin key). Variables: `CHAIN`, `RPC_URL`, `FACTORY`,
+`CIRCUIT`, `INTERVAL_MS`, `LOW_BALANCE_BTC`, `KEEPER_KEY` (secret, Railway only), plus the optional alert
+variables in `keeper/.env.example`.
 
 ## Security notes and known limits
 
+An internal audit (contracts, keeper, frontend, deployment) found and fixed, among others: a beneficiary release
+during an open claim that double-counted `reserved` (critical; `closeCommitment` now reverts `ClaimOpen`), clearing
+lines that could expire before force-settlement or be pledged beyond their cap across circles, Normal-Mode draws
+that could fail the system CCR check, no arbiter deadline, and no collateral recovery after liquidation. All have
+regression tests.
+
 - `ReentrancyGuard` on every function that moves BTC or MUSD; MUSD via SafeERC20; BTC via checked `call`.
-- Clones: `initialize` is callable once (factory check); the implementation is locked in its constructor.
+- Clones: `initialize` runs in the same transaction as `clone`; the implementation is locked in its constructor
+  and the factory refuses an unlocked one. ParCircuit only accepts factory-cloned vaults.
+- **Circuit cycles always terminate:** a debtor's line must outlive the cycle's settle window; each line backs
+  one membership and its obligations are tracked across all cycles; a cycle that is never fully collected
+  finalises one cycle after its settle window and creditors claim pro rata (late payments top them up).
+- **Membership is consent-based:** the admin invites, the member joins with their own vault and line; removal
+  needs zero exposure.
 - **Price can drop after a commitment is created.** Health then fails: no new commitments and no weakening
-  actions, but claims are still honored. The UI shows "under-reserved" and the keeper alerts the owner.
+  actions, but claims are still honored. The UI shows "under-reserved" and the keeper alerts.
+- **Recovery Mode:** payouts need idle BTC in the vault as a top-up reserve; it can't be withdrawn while Recovery
+  Mode is on and commitments are reserved. The MUSD buffer can be withdrawn at any time (health never counts it).
 - **Liquidation:** if BTC falls past the stress level and the trove drops below 110%, it can be liquidated and
-  commitments fail. The certificate discloses "covered down to X%".
-- **Redemption:** lowered by high ICR (vaults run ≥ 160% at stressed price). A redemption cuts collateral and
-  debt at par, so health is re-evaluated on the next action.
-- **Arbiter trust** (Claim kind) is explicit and chosen per commitment.
-- **Not audited.** Testnet only. No upgradeability by design (clones are immutable).
+  commitments fail; cover then reads 0 and the owner can `claimCollateral` any surplus. Certificates disclose how
+  far BTC can fall before the vault drops to the 150% line.
+- **Arbiter trust** (Claim kind) is explicit; the arbiter can't be the owner or beneficiary and has 7 days to
+  decide a dispute, after which the claim pays.
+- **Not audited by a third party.** Testnet only. No upgradeability by design (clones are immutable).
 
 ## Roadmap
 
