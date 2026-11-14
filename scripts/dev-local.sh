@@ -10,9 +10,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOG="$ROOT/.dev-logs"
 mkdir -p "$LOG"
 
-(cd "$ROOT/contracts" && [ -d node_modules ] || npm install)
-(cd "$ROOT/keeper" && [ -d node_modules ] || npm install)
-(cd "$ROOT/web" && [ -d node_modules ] || npm install --legacy-peer-deps)
+(cd "$ROOT/contracts" && { [ -d node_modules ] || npm install; })
+(cd "$ROOT/keeper" && { [ -d node_modules ] || npm install; })
+(cd "$ROOT/web" && { [ -d node_modules ] || npm install --legacy-peer-deps; })
 
 cleanup() { kill $(jobs -p) 2>/dev/null || true; }
 trap cleanup EXIT

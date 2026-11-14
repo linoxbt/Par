@@ -87,7 +87,6 @@ const ALERT_COOLDOWN_MS = num("ALERT_COOLDOWN_MS", 30 * 60_000)
 const LOW_BALANCE_BTC = num("LOW_BALANCE_BTC", 0.005)
 const HEARTBEAT_MS = num("HEARTBEAT_MS", 5 * 60_000, 10_000)
 const TICK_TIMEOUT_MS = num("TICK_TIMEOUT_MS", 10 * 60_000, 30_000)
-const CIRCUIT_LOOKBACK = BigInt(num("CIRCUIT_LOOKBACK_CYCLES", 3, 1))
 const MAX_RETRIES = num("MAX_RETRIES", 40, 1)
 const AUTO_CLOSE_EXPIRED = (process.env.AUTO_CLOSE_EXPIRED ?? "true") !== "false"
 const ONCE = process.argv.includes("--once")
@@ -378,7 +377,11 @@ async function vaultJobs(vault: Address, now: bigint) {
 
     if (c.kind === Kind.Claim) {
       const p = await pendingClaim(vault, id)
-      if (p.open && !p.disputed && now > p.filedAt + BigInt(c.challengeWindow)) {
+      resolveWindow ??= await pc.readContract({ address: vault, abi: parVaultAbi, functionName: "RESOLVE_WINDOW" }).catch(() => 7n * 86400n)
+      const undisputedDue = !p.disputed && now > p.filedAt + BigInt(c.challengeWindow)
+      // An arbiter who doesn't decide within RESOLVE_WINDOW forfeits: anyone can execute (default: pay).
+      const arbiterLapsed = p.disputed && p.disputedAt > 0n && now > p.disputedAt + resolveWindow
+      if (p.open && (undisputedDue || arbiterLapsed)) {
         const { upper, lower } = await hintsForDraw(vault, p.amount)
         await execute(`executeClaim ${vault}#${id}`, { address: vault, abi: parVaultAbi, functionName: "executeClaim", args: [id, upper, lower] } as any, { vault })
       }
@@ -409,40 +412,26 @@ async function vaultJobs(vault: Address, now: bigint) {
   }
 }
 
+let resolveWindow: bigint | undefined
+
 async function pendingClaim(vault: Address, id: bigint) {
   const r = (await pc.readContract({ address: vault, abi: parVaultAbi, functionName: "pendingClaims", args: [id] })) as any
-  return { amount: r[0] as bigint, filedAt: r[1] as bigint, disputed: r[2] as boolean, open: r[3] as boolean }
-}
-
-// circleId -> next cycle to inspect; cycles with failed debtors are retried separately so one bad
-// debtor never blocks later cycles. On restart scanning starts CIRCUIT_LOOKBACK cycles back
-// (older cycles cannot be force-settled any more once finalised), not from genesis.
-const circleCursor = new Map<bigint, bigint>()
-const retryCycles = new Map<bigint, Set<bigint>>()
-
-async function settleCycle(cid: bigint, cyc: bigint, members: readonly Address[]): Promise<boolean> {
-  let allDone = true
-  for (const m of members) {
-    const [net, settled] = await Promise.all([
-      pc.readContract({ address: CIRCUIT!, abi: parCircuitAbi, functionName: "net", args: [cid, cyc, m] }),
-      pc.readContract({ address: CIRCUIT!, abi: parCircuitAbi, functionName: "settled", args: [cid, cyc, m] }),
-    ])
-    if (net >= 0n || settled) continue
-    const [vault] = (await pc.readContract({ address: CIRCUIT!, abi: parCircuitAbi, functionName: "members", args: [cid, m] })) as any
-    const label = `forceSettle circle ${cid} cycle ${cyc} debtor ${m}`
-    if ((failures.get(label) ?? 0) >= MAX_RETRIES) continue // given up (alerted); don't burn gas
-    const { upper, lower } = await hintsForDraw(vault, -net)
-    const ok = await execute(
-      label,
-      { address: CIRCUIT!, abi: parCircuitAbi, functionName: "forceSettle", args: [cid, cyc, m, upper, lower] } as any,
-      { vault, owner: m },
-    )
-    if (ok) log(`${label} settled ${formatEther(-net)} MUSD`)
-    else allDone = false
+  return {
+    amount: r[0] as bigint,
+    filedAt: r[1] as bigint,
+    disputed: r[2] as boolean,
+    open: r[3] as boolean,
+    disputedAt: (r[4] as bigint | undefined) ?? 0n,
   }
-  return allDone
 }
 
+/**
+ * Circuit force-settle. ParCircuit tracks each member line's unsettled debt across every cycle
+ * (`outstanding[vault][lineId]`). Members with nothing outstanding cost one read; for the rest the
+ * keeper walks back from the newest closed cycle and force-settles each unsettled negative net
+ * until it has accounted for the whole outstanding amount. Nothing is persisted, nothing is
+ * skipped after a restart or downtime, and one failing debtor never blocks the others.
+ */
 async function circuitJobs(now: bigint) {
   if (!CIRCUIT) return
   const n = await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "nextCircleId" })
@@ -451,18 +440,36 @@ async function circuitJobs(now: bigint) {
     const settleWindow = circle[3] as bigint
     const members = (await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "members_", args: [cid] })) as Address[]
     const current = await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "currentCycle", args: [cid] })
-    const retry = retryCycles.get(cid) ?? new Set<bigint>()
-    retryCycles.set(cid, retry)
-
-    for (const cyc of [...retry]) if (await settleCycle(cid, cyc, members)) retry.delete(cyc)
-
-    let cyc = circleCursor.get(cid) ?? (current > CIRCUIT_LOOKBACK ? current - CIRCUIT_LOOKBACK : 0n)
-    for (; cyc < current; cyc++) {
-      const close = await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "cycleClose", args: [cid, cyc] })
-      if (now < close + settleWindow) break // window still open: debtors may settle themselves
-      if (!(await settleCycle(cid, cyc, members))) retry.add(cyc) // retry later, keep moving
+    for (const m of members) {
+      try {
+        const [vault, lineId, active] = (await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "members", args: [cid, m] })) as any
+        if (!active) continue
+        const owed = (await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "outstanding", args: [vault, lineId] })) as bigint
+        if (owed === 0n) continue
+        let found = 0n
+        for (let cyc = current; cyc >= 0n && found < owed; cyc--) {
+          const [net, settled] = await Promise.all([
+            pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "net", args: [cid, cyc, m] }),
+            pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "settled", args: [cid, cyc, m] }),
+          ])
+          if (net >= 0n || settled) continue
+          found += -net
+          const close = await pc.readContract({ address: CIRCUIT, abi: parCircuitAbi, functionName: "cycleClose", args: [cid, cyc] })
+          if (now < close + settleWindow) continue // window still open: the debtor may settle themselves
+          const label = `forceSettle circle ${cid} cycle ${cyc} debtor ${m}`
+          if ((failures.get(label) ?? 0) >= MAX_RETRIES) continue // given up (alerted); don't burn gas
+          const { upper, lower } = await hintsForDraw(vault, -net)
+          const ok = await execute(
+            label,
+            { address: CIRCUIT, abi: parCircuitAbi, functionName: "forceSettle", args: [cid, cyc, m, upper, lower] } as any,
+            { vault, owner: m },
+          )
+          if (ok) log(`${label}: drew ${formatEther(-net)} MUSD from the member's clearing line`)
+        }
+      } catch (e) {
+        log(`circle ${cid} member ${m} failed: ${(e as Error).message.split("\n")[0]}`)
+      }
     }
-    circleCursor.set(cid, cyc)
   }
 }
 
