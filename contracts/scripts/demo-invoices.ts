@@ -4,6 +4,7 @@
 import fs from "fs"
 import path from "path"
 import { ethers, network } from "hardhat"
+import { postGraph } from "./demo-graph"
 
 async function main() {
   const dep = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "deployments", `${network.name}.json`), "utf8"))
@@ -15,17 +16,7 @@ async function main() {
   ]
   const circleId = BigInt(process.env.CIRCLE || "0")
   const circuit = await ethers.getContractAt("ParCircuit", dep.ParCircuit)
-  const graph: [number, number, string][] = [
-    [0, 1, "1000"],
-    [1, 2, "1000"],
-    [2, 0, "900"],
-  ]
-  for (const [cr, db, amt] of graph) {
-    const id = await circuit.nextInvoiceId()
-    await (await circuit.connect(shops[cr].s).createInvoice(circleId, shops[db].s.address, ethers.parseEther(amt), ethers.id(`demo-${id}`))).wait()
-    await (await circuit.connect(shops[db].s).acceptInvoice(id)).wait()
-    console.log(`invoice #${id}: ${shops[db].name} owes ${shops[cr].name} ${amt} MUSD`)
-  }
+  await postGraph(circuit, circleId, shops, Number(process.env.DEMO_CHUNK || 100))
   const cyc = await circuit.currentCycle(circleId)
   console.log(`cycle ${cyc}: gross ${ethers.formatEther(await circuit.gross(circleId, cyc))} · owed ${ethers.formatEther(await circuit.totalOwed(circleId, cyc))} · ${await circuit.nettingEfficiencyBps(circleId, cyc)} bps`)
 }

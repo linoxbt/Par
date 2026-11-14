@@ -1,5 +1,5 @@
 // Pre-creates the Circuit demo (spec section 10): three shops with vaults and clearing lines,
-// a circle with a 180 s cycle / 60 s settle window, and a tangled invoice graph
+// a circle with a 600 s cycle / 60 s settle window, and a tangled invoice graph
 // (2,900 MUSD gross, 100 MUSD net).
 //
 //   local:   npx hardhat run scripts/seed-demo.ts --network localhost
@@ -7,10 +7,12 @@
 //            npx hardhat run scripts/seed-demo.ts --network matsnet
 //
 // Env: DEMO_BTC (per vault, default 1 local / 0.1 testnet), DEMO_SEED (default 1800),
-//      DEMO_LINE (clearing line cap, default 1500), DEMO_CYCLE (180), DEMO_WINDOW (60)
+//      DEMO_CHUNK (invoice chunk, default 100), DEMO_LINE (clearing line cap, default 1.5 x chunk),
+//      DEMO_CYCLE (600), DEMO_WINDOW (60)
 import fs from "fs"
 import path from "path"
 import { ethers, network } from "hardhat"
+import { postGraph } from "./demo-graph"
 
 const Z = ethers.ZeroAddress
 
@@ -23,8 +25,9 @@ async function main() {
 
   const btc = ethers.parseEther(process.env.DEMO_BTC || (local ? "1" : "0.1"))
   const seed = ethers.parseEther(process.env.DEMO_SEED || "1800")
-  const line = ethers.parseEther(process.env.DEMO_LINE || "1500")
-  const cycle = Number(process.env.DEMO_CYCLE || 180)
+  const chunk = Number(process.env.DEMO_CHUNK || 100)
+  const line = ethers.parseEther(process.env.DEMO_LINE || String(Math.ceil(chunk * 1.5)))
+  const cycle = Number(process.env.DEMO_CYCLE || 600)
   const window = Number(process.env.DEMO_WINDOW || 60)
 
   const factory = await ethers.getContractAt("ParFactory", dep.ParFactory)
@@ -57,18 +60,7 @@ async function main() {
   }
   console.log(`circle #${circleId} (cycle ${cycle}s, settle window ${window}s)`)
 
-  // wholesaler owes importer 1000, repairer owes wholesaler 1000, importer owes repairer 900
-  const graph: [number, number, string][] = [
-    [0, 1, "1000"],
-    [1, 2, "1000"],
-    [2, 0, "900"],
-  ]
-  for (const [cr, db, amt] of graph) {
-    const id = await circuit.nextInvoiceId()
-    await (await circuit.connect(shops[cr].s).createInvoice(circleId, shops[db].s.address, ethers.parseEther(amt), ethers.id(`demo-${id}`))).wait()
-    await (await circuit.connect(shops[db].s).acceptInvoice(id)).wait()
-    console.log(`invoice #${id}: ${shops[db].name} owes ${shops[cr].name} ${amt} MUSD`)
-  }
+  await postGraph(circuit, circleId, shops, chunk)
   const cyc = await circuit.currentCycle(circleId)
   console.log(
     `gross ${ethers.formatEther(await circuit.gross(circleId, cyc))} · owed ${ethers.formatEther(await circuit.totalOwed(circleId, cyc))} · efficiency ${await circuit.nettingEfficiencyBps(circleId, cyc)} bps`,
