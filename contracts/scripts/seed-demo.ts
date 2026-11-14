@@ -41,16 +41,36 @@ async function main() {
   ]
   const vaults: string[] = []
   const lineIds: bigint[] = []
+  // Resumable: reuses a shop's latest vault and skips steps already done. Trove-touching
+  // calls get gas headroom because MUSD's sorted-list insert can exceed the estimate.
+  const pad = async (est: Promise<bigint>) => ((await est) * 3n) / 2n
   for (const { name, s } of shops) {
-    const rc = await (await factory.connect(s).createVault()).wait()
-    const log = rc!.logs.map((l) => factory.interface.parseLog(l)).find((l) => l?.name === "VaultCreated")!
-    const vault = await ethers.getContractAt("ParVault", log.args.vault)
-    await (await vault.connect(s).openTrove(seed, Z, Z, { value: btc })).wait()
-    const lineId = await vault.nextId()
-    await (await vault.connect(s).createClearingLine(dep.ParCircuit, line, expiry)).wait()
-    vaults.push(await vault.getAddress())
+    let addr: string
+    const n = await factory.vaultCount(s.address)
+    if (n > 0n) addr = await factory.vaultsOf(s.address, n - 1n)
+    else {
+      const rc = await (await factory.connect(s).createVault()).wait()
+      addr = rc!.logs.map((l) => factory.interface.parseLog(l)).find((l) => l?.name === "VaultCreated")!.args.vault
+    }
+    const vault = await ethers.getContractAt("ParVault", addr)
+    const [coll] = await vault.troveState()
+    if (coll === 0n) {
+      const gasLimit = await pad(vault.connect(s).openTrove.estimateGas(seed, Z, Z, { value: btc }))
+      await (await vault.connect(s).openTrove(seed, Z, Z, { value: btc, gasLimit })).wait()
+    }
+    let lineId = -1n
+    for (let i = 0n; i < (await vault.nextId()); i++) {
+      const [kind, status, beneficiary] = await vault.commitmentInfo(i)
+      if (Number(kind) === 2 && Number(status) === 1 && beneficiary.toLowerCase() === dep.ParCircuit.toLowerCase()) lineId = i
+    }
+    if (lineId < 0n) {
+      lineId = await vault.nextId()
+      const gasLimit = await pad(vault.connect(s).createClearingLine.estimateGas(dep.ParCircuit, line, expiry))
+      await (await vault.connect(s).createClearingLine(dep.ParCircuit, line, expiry, { gasLimit })).wait()
+    }
+    vaults.push(addr)
     lineIds.push(lineId)
-    console.log(`${name}: ${s.address} vault ${await vault.getAddress()} line #${lineId}`)
+    console.log(`${name}: ${s.address} vault ${addr} line #${lineId}`)
   }
 
   const circleId = await circuit.nextCircleId()

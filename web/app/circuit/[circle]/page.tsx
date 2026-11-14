@@ -40,10 +40,19 @@ export default function CircleBoard({ params }: { params: { circle: string } }) 
     [s.rows],
   )
   const edges: Edge[] = useMemo(
-    () =>
-      invoices
-        .filter((i) => i.status === 2 && i.cycle === s.cycle)
-        .map((i) => ({ from: i.debtor.toLowerCase(), to: i.creditor.toLowerCase(), amount: toNum(i.amount) })),
+    () => {
+      // one edge per debtor -> creditor pair, summing every accepted invoice between them
+      const m = new Map<string, Edge>()
+      for (const i of invoices) {
+        if (i.status !== 2 || i.cycle !== s.cycle) continue
+        const from = i.debtor.toLowerCase()
+        const to = i.creditor.toLowerCase()
+        const e = m.get(`${from}->${to}`)
+        if (e) e.amount += toNum(i.amount)
+        else m.set(`${from}->${to}`, { from, to, amount: toNum(i.amount) })
+      }
+      return [...m.values()]
+    },
     [invoices, s.cycle],
   )
 
