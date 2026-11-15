@@ -441,6 +441,7 @@ function MyPosition({
   const { data: bal } = useReadContract({ address: p?.musd, abi: erc20Abi, functionName: "balanceOf", args: [me ?? Z], query: { enabled: !!me && !!p } })
   const tA = useTx(() => refetch())
   const t = useTx(onDone)
+  const tLeave = useTx(onDone)
   return (
     <Card className="flex flex-col gap-3 text-sm">
       <div className="label">Your position</div>
@@ -485,6 +486,16 @@ function MyPosition({
         )
       })()}
       {row.settled && <Badge tone="ok">Done for this cycle</Badge>}
+      {net === 0n && (
+        <button
+          className="self-start text-xs text-muted underline decoration-line-strong underline-offset-4 hover:text-bad disabled:opacity-40"
+          disabled={tLeave.busy}
+          onClick={() => tLeave.send({ address: CIRCUIT, abi: parCircuitAbi, functionName: "removeMember", args: [circleId, me] })}
+        >
+          {tLeave.busy ? "Leaving…" : "Leave this circle"}
+        </button>
+      )}
+      <TxStatus tx={tLeave} />
       <TxStatus tx={tA} />
       <TxStatus tx={t} />
     </Card>

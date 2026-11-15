@@ -3,15 +3,16 @@
 import Link from "next/link"
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { formatEther, type Address } from "viem"
+import { formatEther, isAddress, type Address } from "viem"
 import { useBalance, useReadContract, useSendTransaction, useWaitForTransactionReceipt } from "wagmi"
 import { WalletButton } from "@/components/Wallet"
 import { parFactoryAbi, parVaultAbi } from "@/lib/abi"
-import { CIRCUIT, CONFIGURED, FACTORY, addrUrl, chain } from "@/lib/config"
+import { CIRCUIT, CONFIGURED, FACTORY, GAS_COMP, addrUrl, chain } from "@/lib/config"
+import { erc20Abi } from "@/lib/mezoAbi"
 import { fmtBps, fmtBtc, fmtDate, fmtMusd, fmtPct, fmtRatio, fmtUsd, parseAmount, parseIntSafe, short, toNum } from "@/lib/format"
 import { KIND_LABEL, errorText, useChainNow, useCommitments, useMarket, useMe, useProtocol, useTx, useVault, useVaultsOf, type Commitment } from "@/lib/hooks"
 import { liquidationPrice, maxDrop, openPreview } from "@/lib/risk"
-import { Badge, Button, Card, CardTitle, Empty, Field, HealthGauge, LinkButton, Meter, NotDeployed, PageHead, Segmented, Stat, TxLink, TxStatus, inputCls } from "@/components/ui"
+import { Addr, Badge, Button, Card, CardTitle, Empty, Field, HealthGauge, LinkButton, Meter, NotDeployed, Num, PageHead, Segmented, Stat, TxLink, TxStatus, inputCls } from "@/components/ui"
 
 const Z = "0x0000000000000000000000000000000000000000" as Address
 
@@ -89,11 +90,15 @@ function VaultInner() {
       ) : !data ? (
         <div className="h-40 animate-pulse rounded-2xl border border-line bg-white" />
       ) : !data.troveActive ? (
-        <OpenTrove vault={selected!} onDone={refetchVault} />
+        <>
+          <OpenTrove vault={selected!} onDone={refetchVault} />
+          <ClaimSurplus vault={selected!} onDone={refetchVault} />
+        </>
       ) : (
         <Dashboard vault={selected!} />
       )}
       {vaults.length > 0 && <CreateVault onDone={refetch} secondary />}
+      <VaultRecovery onDone={refetch} />
     </div>
   )
 }
@@ -375,7 +380,9 @@ function Dashboard({ vault }: { vault: Address }) {
         )}
       </Card>
 
-      {isOwner && <Actions vault={vault} buffer={v.buffer} idle={v.idleBtc} headroom={v.headroom} onDone={refreshAll} />}
+      {isOwner && (
+        <Actions vault={vault} buffer={v.buffer} idle={v.idleBtc} headroom={v.headroom} debt={v.debt} reserved={v.reserved} onDone={refreshAll} />
+      )}
     </div>
   )
 }
@@ -429,9 +436,25 @@ function RecoveryBanner({ vault, reserved, buffer, price, idle }: { vault: Addre
   )
 }
 
-type Tab = "topup" | "reserve" | "buffer" | "repay" | "line"
+type Tab = "topup" | "reserve" | "buffer" | "repay" | "line" | "collateral" | "borrow" | "refinance" | "owner" | "close"
 
-function Actions({ vault, buffer, idle, headroom, onDone }: { vault: Address; buffer: bigint; idle: bigint; headroom: bigint; onDone: () => void }) {
+function Actions({
+  vault,
+  buffer,
+  idle,
+  headroom,
+  debt,
+  reserved,
+  onDone,
+}: {
+  vault: Address
+  buffer: bigint
+  idle: bigint
+  headroom: bigint
+  debt: bigint
+  reserved: bigint
+  onDone: () => void
+}) {
   const [tab, setTab] = useState<Tab>("topup")
   return (
     <Card>
@@ -446,6 +469,11 @@ function Actions({ vault, buffer, idle, headroom, onDone }: { vault: Address; bu
             { value: "buffer", label: "Buffer" },
             { value: "repay", label: "Repay" },
             { value: "line", label: "Circuit line" },
+            { value: "collateral", label: "Collateral" },
+            { value: "borrow", label: "Borrow" },
+            { value: "refinance", label: "Refinance" },
+            { value: "owner", label: "Ownership" },
+            { value: "close", label: "Close" },
           ]}
         />
       </div>
@@ -455,6 +483,11 @@ function Actions({ vault, buffer, idle, headroom, onDone }: { vault: Address; bu
         {tab === "buffer" && <BufferOut vault={vault} buffer={buffer} onDone={onDone} />}
         {tab === "repay" && <Repay vault={vault} onDone={onDone} />}
         {tab === "line" && <ClearingLine vault={vault} headroom={headroom} onDone={onDone} />}
+        {tab === "collateral" && <WithdrawColl vault={vault} onDone={onDone} />}
+        {tab === "borrow" && <Borrow vault={vault} headroom={headroom} onDone={onDone} />}
+        {tab === "refinance" && <Refinance vault={vault} onDone={onDone} />}
+        {tab === "owner" && <Ownership vault={vault} onDone={onDone} />}
+        {tab === "close" && <CloseTrove vault={vault} debt={debt} buffer={buffer} reserved={reserved} onDone={onDone} />}
       </div>
     </Card>
   )
@@ -641,5 +674,203 @@ function ClearingLine({ vault, headroom, onDone }: { vault: Address; headroom: b
       </div>
       <TxStatus tx={t} />
     </div>
+  )
+}
+
+function WithdrawColl({ vault, onDone }: { vault: Address; onDone: () => void }) {
+  const [v, setV] = useState("")
+  const t = useTx(onDone)
+  const w = parseAmount(v)
+  return (
+    <div className="flex flex-col gap-3">
+      <AmountRow
+        label="Withdraw collateral"
+        hint="BTC goes back to your wallet. Rejected if the vault would fail its stress test or drop below what its promises need."
+        unit="BTC"
+        value={v}
+        onChange={setV}
+        action={
+          <Button busy={t.busy} disabled={!w} onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "withdrawCollateral", args: [w!, Z, Z] })}>
+            Withdraw
+          </Button>
+        }
+      />
+      <TxStatus tx={t} />
+    </div>
+  )
+}
+
+function Borrow({ vault, headroom, onDone }: { vault: Address; headroom: bigint; onDone: () => void }) {
+  const { me } = useMe()
+  const [v, setV] = useState("")
+  const t = useTx(onDone)
+  const w = parseAmount(v)
+  return (
+    <div className="flex flex-col gap-3">
+      <AmountRow
+        label="Borrow MUSD to your wallet"
+        hint={`Draws new debt from the trove (0.1% fee). Room under capacity: ${fmtMusd(headroom, 0)} MUSD. Must still pass the stress test.`}
+        unit="MUSD"
+        value={v}
+        onChange={setV}
+        action={
+          <Button busy={t.busy} disabled={!w || !me} onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "borrow", args: [w!, me!, Z, Z] })}>
+            Borrow
+          </Button>
+        }
+      />
+      <TxStatus tx={t} />
+    </div>
+  )
+}
+
+function Refinance({ vault, onDone }: { vault: Address; onDone: () => void }) {
+  const t = useTx(onDone)
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <p className="text-muted">
+        Refinancing moves the trove to MUSD&apos;s current interest rate and re-snapshots capacity at today&apos;s BTC price (MUSD charges a refinancing
+        fee). Useful after BTC has risen. It is rejected if the vault would then fail its stress test.
+      </p>
+      <div>
+        <Button busy={t.busy} onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "refinance", args: [Z, Z] })}>
+          Refinance trove
+        </Button>
+      </div>
+      <TxStatus tx={t} />
+    </div>
+  )
+}
+
+function Ownership({ vault, onDone }: { vault: Address; onDone: () => void }) {
+  const [to, setTo] = useState("")
+  const t = useTx(onDone)
+  const { data: pending, refetch } = useReadContract({ address: vault, abi: parVaultAbi, functionName: "pendingOwner" })
+  const ok = isAddress(to)
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <p className="text-muted">
+        Ownership moves in two steps so a typo can&apos;t lose the vault: you propose a new owner, and they accept from their own wallet on this page.
+        The vault keeps its trove, promises and any circle membership.
+      </p>
+      <Field label="New owner">
+        <input className={inputCls} placeholder="0x…" value={to} onChange={(e) => setTo(e.target.value)} />
+      </Field>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button busy={t.busy} disabled={!ok} onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "transferOwnership", args: [to as Address] }).then(() => refetch())}>
+          Propose new owner
+        </Button>
+        {pending && pending !== Z && (
+          <span className="text-xs text-muted">
+            Pending: <Addr a={pending as string} />
+          </span>
+        )}
+      </div>
+      <TxStatus tx={t} />
+    </div>
+  )
+}
+
+function CloseTrove({ vault, debt, buffer, reserved, onDone }: { vault: Address; debt: bigint; buffer: bigint; reserved: bigint; onDone: () => void }) {
+  const p = useProtocol()
+  const { me } = useMe()
+  const t = useTx(onDone)
+  const tSend = useTx(onDone)
+  // MUSD's closeTrove repays everything except the 200 MUSD gas compensation, which it burns itself.
+  const need = debt > GAS_COMP ? debt - GAS_COMP : 0n
+  const short = need > buffer ? need - buffer : 0n
+  // a little headroom for interest accrued between now and the transaction
+  const sendAmt = short > 0n ? short + short / 200n + 10n ** 18n : 0n
+  const { data: walletMusd } = useReadContract({ address: p?.musd, abi: erc20Abi, functionName: "balanceOf", args: [me ?? Z], query: { enabled: !!p && !!me, refetchInterval: 8_000 } })
+  const canSend = walletMusd !== undefined && (walletMusd as bigint) >= sendAmt
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      {reserved > 0n ? (
+        <p className="rounded-lg bg-warn-wash px-3 py-2 text-warn">
+          {fmtMusd(reserved, 0)} MUSD is still reserved by live promises. Release them or let them expire (then close them from their certificate) before
+          closing the trove.
+        </p>
+      ) : (
+        <>
+          <p className="text-muted">
+            Closing repays the trove&apos;s debt from the vault&apos;s MUSD and sends all its BTC back to you. The vault needs about{" "}
+            <Num v={fmtMusd(need, 0)} /> MUSD; it holds <Num v={fmtMusd(buffer, 0)} />.
+          </p>
+          {short > 0n && (
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-warn">Short by about {fmtMusd(short, 0)} MUSD.</span>
+                <Button
+                  variant="ghost"
+                  busy={tSend.busy}
+                  disabled={!p || !me || !canSend}
+                  onClick={() => tSend.send({ address: p!.musd, abi: erc20Abi, functionName: "transfer", args: [vault, sendAmt] })}
+                >
+                  Send {fmtMusd(sendAmt, 0)} MUSD to the vault
+                </Button>
+              </div>
+              {!canSend && (
+                <p className="text-xs text-muted">
+                  Your wallet holds {fmtMusd(walletMusd as bigint | undefined, 2)} MUSD. Borrowing from this vault won&apos;t close the gap (it adds the same
+                  amount to the debt): get MUSD elsewhere, for example by swapping BTC for MUSD in the Mezo app, then send it here.
+                </p>
+              )}
+            </div>
+          )}
+          <div>
+            <Button variant="danger" busy={t.busy} disabled={short > 0n} onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "closeTrove", args: [] })}>
+              Close trove and withdraw all BTC
+            </Button>
+          </div>
+        </>
+      )}
+      <TxStatus tx={tSend} />
+      <TxStatus tx={t} />
+    </div>
+  )
+}
+
+/** For a wallet that has been proposed as a vault's new owner, or a vault whose trove was liquidated/redeemed. */
+function VaultRecovery({ onDone }: { onDone: () => void }) {
+  const { me } = useMe()
+  const [vault, setVault] = useState("")
+  const ok = isAddress(vault)
+  const { data: isPar } = useReadContract({ address: FACTORY, abi: parFactoryAbi, functionName: "isVault", args: [(ok ? vault : Z) as Address], query: { enabled: ok } })
+  const { data: pending } = useReadContract({ address: (ok ? vault : Z) as Address, abi: parVaultAbi, functionName: "pendingOwner", query: { enabled: ok && !!isPar } })
+  const t = useTx(onDone)
+  const canAccept = ok && isPar && pending && me && (pending as string).toLowerCase() === me.toLowerCase()
+  return (
+    <Card className="flex flex-col gap-3 text-sm">
+      <CardTitle sub="Someone is handing you a vault? Paste its address and accept it from this wallet.">Accept a vault transfer</CardTitle>
+      <Field label="Vault address">
+        <input className={inputCls} placeholder="0x…" value={vault} onChange={(e) => setVault(e.target.value)} />
+      </Field>
+      {ok && isPar === false && <p className="text-warn">That address isn&apos;t a Par vault.</p>}
+      {ok && isPar && !canAccept && <p className="text-muted">This wallet isn&apos;t the proposed new owner of that vault.</p>}
+      <div>
+        <Button busy={t.busy} disabled={!canAccept} onClick={() => t.send({ address: vault as Address, abi: parVaultAbi, functionName: "acceptOwnership", args: [] })}>
+          Accept ownership
+        </Button>
+      </div>
+      <TxStatus tx={t} />
+    </Card>
+  )
+}
+
+/** After a liquidation or a full redemption MUSD holds any collateral surplus for the vault. */
+function ClaimSurplus({ vault, onDone }: { vault: Address; onDone: () => void }) {
+  const t = useTx(onDone)
+  return (
+    <Card className="flex flex-col gap-3 text-sm">
+      <CardTitle sub="If this vault's trove was liquidated or fully redeemed, MUSD keeps any leftover BTC for it. Pull it into the vault, then withdraw it from the Reserve tab.">
+        Recover surplus collateral
+      </CardTitle>
+      <div>
+        <Button variant="ghost" busy={t.busy} onClick={() => t.send({ address: vault, abi: parVaultAbi, functionName: "claimCollateral", args: [] })}>
+          Claim surplus collateral
+        </Button>
+      </div>
+      <TxStatus tx={t} />
+    </Card>
   )
 }

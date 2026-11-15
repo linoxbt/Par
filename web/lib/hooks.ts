@@ -328,7 +328,21 @@ export function errorText(e: unknown): string {
         NotAdmin: "Only the circle admin can do this.",
         NotVault: "Only Par vaults can do this.",
       }
-      if (name) return (map[name] ?? name) + (args?.length ? ` (${args.map(String).join(", ")})` : "")
+      if (name) {
+        // Show error arguments in human units, never as raw wei or Unix timestamps.
+        const a = (args ?? []) as unknown[]
+        const musd = (v: unknown) => `${(Number(v as bigint) / 1e18).toLocaleString("en-US", { maximumFractionDigits: 2 })} MUSD`
+        const when = (v: unknown) => new Date(Number(v as bigint) * 1000).toLocaleString()
+        const extra =
+          name === "RecoveryModeNeedsReserve" && a[0] !== undefined
+            ? ` Needed: ${(Number(a[0] as bigint) / 1e18).toFixed(6)} BTC.`
+            : name === "OverLimit" && a.length === 2
+              ? ` Line available ${musd(a[0])}, would owe ${musd(a[1])}.`
+              : name === "LineExpiresTooSoon" && a.length === 2
+                ? ` It expires ${when(a[0])}; it must last until at least ${when(a[1])}.`
+                : ""
+        return (map[name] ?? name) + extra
+      }
       if (r.reason) return r.reason
     }
     return e.shortMessage

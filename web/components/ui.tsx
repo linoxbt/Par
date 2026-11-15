@@ -297,3 +297,8 @@ export function ParVaultGate({ vault, children }: { vault: string; children: Rea
   if (isVault === undefined) return <div className="mx-auto h-96 max-w-lg animate-pulse rounded-2xl border border-line bg-white" />
   return <>{children}</>
 }
+
+/** Inline monospaced figure. */
+export function Num({ v }: { v: string }) {
+  return <span className="num text-fg">{v}</span>
+}

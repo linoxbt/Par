@@ -44,7 +44,7 @@ An invoice must be accepted in the cycle it was created in. After the cycle clos
 
 ## Leave a circle
 
-You can leave (or the admin can remove you from the members list on the circle page) with `removeMember(circleId, member)` once you owe nothing (`outstanding` is zero) and your net is zero in the current and previous cycle. Otherwise it reverts with `HasObligations()`. Leaving frees the line for another circle, or for closing.
+You can leave with **Leave this circle** under "Your position" on the circle page (or the admin can remove you from the members list) — both call `removeMember(circleId, member)` — once you owe nothing (`outstanding` is zero) and your net is zero in the current and previous cycle. Otherwise it reverts with `HasObligations()`. Leaving frees the line for another circle, or for closing.
 
 To move to a different line, the admin sends a new invite with the new line and you `join` again; the same no-exposure rule applies.
 
