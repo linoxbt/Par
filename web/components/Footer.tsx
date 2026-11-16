@@ -2,7 +2,7 @@ import Link from "next/link"
 import { Logo } from "@/components/Header"
 
 const COLS: [string, [string, string][]][] = [
-  ["Product", [["Vault", "/vault"], ["Guarantees", "/vault/new-guarantee"], ["Circuit", "/circuit"], ["Docs", "/docs"]]],
+  ["Product", [["Vault", "/vault"], ["Guarantees", "/vault/new-guarantee"], ["Circuit", "/circuit"], ["Market", "/market"], ["Lagos pilot", "/pilot"], ["Docs", "/docs"]]],
   ["Developers", [["Quickstart", "/developers"], ["Contracts", "/developers#contracts"], ["Security", "/security"], ["GitHub", "https://github.com/linoxbt/par"]]],
   ["Legal", [["Terms of use", "/terms"], ["Privacy policy", "/privacy"], ["Cookie policy", "/cookies"], ["MUSD docs", "https://mezo.org/docs/developers/musd"]]],
 ]

@@ -16,6 +16,48 @@ interface IParFactoryHook {
     function onVaultOwnerChanged(address from, address to) external;
 }
 
+/// @dev Implemented by ParMarket: cover requests a vault owner can fill (underwrite) in one call.
+///      Declared here, not imported, so ParVault and ParMarket do not import each other.
+interface IParMarket {
+    enum RKind {
+        Scheduled, // same numbering as ParVault.Kind
+        Claim
+    }
+
+    enum RStatus {
+        None, // no such request
+        Open,
+        Filled,
+        Cancelled
+    }
+
+    /// @dev Packed into 8 slots. Field meanings match ParVault.Commitment; the principal of the
+    ///      commitment is `requester`.
+    struct Request {
+        address requester;
+        RKind kind;
+        RStatus status;
+        uint64 deadline; // last moment the request can be filled
+        address beneficiary;
+        uint64 start; // Scheduled
+        uint32 period; // Scheduled
+        address arbiter; // Claim
+        uint32 grace; // Scheduled
+        uint16 count; // Scheduled
+        uint32 challengeWindow; // Claim
+        address vault; // set when filled
+        uint64 expiry;
+        uint128 installment; // Scheduled
+        uint128 cap;
+        uint128 premium; // MUSD escrowed by the market, paid to the underwriter on fill
+        uint256 commitmentId; // set when filled
+        bytes32 ref; // metadata hash (e.g. pilot reference)
+    }
+
+    function getRequest(uint256 id) external view returns (Request memory);
+    function onFill(uint256 id, uint256 commitmentId) external;
+}
+
 /// @title ParVault
 /// @notice One vault per user (EIP-1167 clone). The vault is the MUSD trove's borrower,
 ///         so it controls the trove. Undrawn borrowing capacity is reserved against
@@ -278,6 +320,48 @@ contract ParVault is ReentrancyGuard {
         uint128 coverCap,
         uint64 expiry
     ) external onlyOwner returns (uint256 id) {
+        id = _createScheduled(beneficiary, principal, installment, start, period, grace, count, coverCap, expiry);
+    }
+
+    function createClaim(
+        address beneficiary,
+        address principal,
+        address arbiter,
+        uint128 cap,
+        uint64 expiry,
+        uint32 challengeWindow
+    ) external onlyOwner returns (uint256 id) {
+        id = _createClaim(beneficiary, principal, arbiter, cap, expiry, challengeWindow);
+    }
+
+    /// @notice Underwrite an open ParMarket request from this vault in one transaction: creates the
+    ///         commitment the request describes (same checks and stress test as createScheduled /
+    ///         createClaim, principal = the requester), then the market verifies it and pays the
+    ///         escrowed premium to this vault's owner. Any failure reverts the whole fill.
+    function fillRequest(address market, uint256 requestId) external onlyOwner nonReentrant returns (uint256 id) {
+        IParMarket.Request memory r = IParMarket(market).getRequest(requestId);
+        if (r.status != IParMarket.RStatus.Open) revert NotActive();
+        if (r.kind == IParMarket.RKind.Scheduled) {
+            id = _createScheduled(
+                r.beneficiary, r.requester, r.installment, r.start, r.period, r.grace, r.count, r.cap, r.expiry
+            );
+        } else {
+            id = _createClaim(r.beneficiary, r.requester, r.arbiter, r.cap, r.expiry, r.challengeWindow);
+        }
+        IParMarket(market).onFill(requestId, id);
+    }
+
+    function _createScheduled(
+        address beneficiary,
+        address principal,
+        uint128 installment,
+        uint64 start,
+        uint32 period,
+        uint32 grace,
+        uint16 count,
+        uint128 coverCap,
+        uint64 expiry
+    ) internal returns (uint256 id) {
         // Every installment must be triggerable before expiry: the last one becomes
         // triggerable after lastDue + grace, and stays so for at least MIN_TRIGGER_WINDOW.
         if (
@@ -294,14 +378,14 @@ contract ParVault is ReentrancyGuard {
         c.count = count;
     }
 
-    function createClaim(
+    function _createClaim(
         address beneficiary,
         address principal,
         address arbiter,
         uint128 cap,
         uint64 expiry,
         uint32 challengeWindow
-    ) external onlyOwner returns (uint256 id) {
+    ) internal returns (uint256 id) {
         if (
             beneficiary == address(0) || arbiter == address(0) || arbiter == owner || arbiter == beneficiary
                 || arbiter == principal

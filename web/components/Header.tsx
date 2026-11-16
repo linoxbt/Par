@@ -44,6 +44,7 @@ const PRODUCTS = [
   { href: "/vault", t: "Vault", d: "Lock BTC once. Capacity and rate fixed at open.", i: "◐" },
   { href: "/vault/new-guarantee", t: "Guarantees", d: "Rent, supplier terms and bonds that pay themselves.", i: "§" },
   { href: "/circuit", t: "Circuit", d: "Trade credit netted onchain. Only net debts settle.", i: "⇄" },
+  { href: "/market", t: "Market", d: "Request cover with a premium, or back requests and earn it.", i: "◎" },
 ]
 
 function ProductsMenu() {
@@ -91,6 +92,8 @@ const MOBILE_LINKS: [string, string][] = [
   ["/vault", "Vault"],
   ["/vault/new-guarantee", "Guarantees"],
   ["/circuit", "Circuit"],
+  ["/market", "Market"],
+  ["/pilot", "Lagos pilot"],
   ["/docs", "Docs"],
   ["/developers", "Developers"],
   ["/security", "Security"],
@@ -131,6 +134,7 @@ export function Header({ wallet }: { wallet?: React.ReactNode }) {
           </Link>
           <nav className="hidden items-center md:flex">
             <ProductsMenu />
+            {link("/pilot", "Pilot")}
             {link("/docs", "Docs")}
             {link("/developers", "Developers")}
             {link("/security", "Security")}

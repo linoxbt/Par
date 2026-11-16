@@ -132,6 +132,11 @@ export default function Privacy() {
             <td>IP address, user agent, Par&apos;s project ID, usage events; encrypted session messages and wallet metadata when you use the relay</td>
           </tr>
           <tr>
+            <td>ExchangeRate-API</td>
+            <td>Our server, about once an hour (pilot and naira hints)</td>
+            <td>Nothing about you: our server fetches a public USD/NGN rate; your browser never contacts it</td>
+          </tr>
+          <tr>
             <td>Mezo Passport</td>
             <td>When you connect a Bitcoin wallet</td>
             <td>Bitcoin and Mezo addresses, signing requests</td>

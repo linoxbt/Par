@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { addrUrl, txUrl } from "@/lib/config"
 import { short } from "@/lib/format"
+import { useNgn } from "@/lib/fx"
 import { useIsParVault } from "@/lib/hooks"
 
 export function Card({ children, className = "", pad = true }: { children: React.ReactNode; className?: string; pad?: boolean }) {
@@ -301,4 +302,11 @@ export function ParVaultGate({ vault, children }: { vault: string; children: Rea
 /** Inline monospaced figure. */
 export function Num({ v }: { v: string }) {
   return <span className="num text-fg">{v}</span>
+}
+
+/** Small "≈ ₦…" hint next to a MUSD amount (Lagos pilot). Renders nothing until the rate is known. */
+export function NgnHint({ wei, className = "" }: { wei?: bigint; className?: string }) {
+  const ngn = useNgn()
+  const s = ngn(wei)
+  return s ? <span className={`num text-xs text-subtle ${className}`} title="Reference rate, MUSD ≈ $1. Rates by ExchangeRate-API.">{s}</span> : null
 }

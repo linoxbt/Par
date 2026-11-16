@@ -9,7 +9,7 @@ import { fmtBtc, fmtDate, fmtDuration, fmtMusd, fmtPct, fmtUsd, parseAmount, par
 import { KIND_LABEL, useChainNow, useCommitment, useLogs, useMarket, useMe, useTx, useVault } from "@/lib/hooks"
 import { maxDrop } from "@/lib/risk"
 import { Mark } from "@/components/Header"
-import { Addr, Badge, Button, Card, CardTitle, Field, Meter, ParVaultGate, Problem, TxLink, TxStatus, inputCls } from "@/components/ui"
+import { Addr, Badge, Button, Card, CardTitle, Field, Meter, NgnHint, ParVaultGate, Problem, TxLink, TxStatus, inputCls } from "@/components/ui"
 
 const Z = "0x0000000000000000000000000000000000000000" as Address
 
@@ -135,6 +135,7 @@ function Certificate({ vault, id }: { vault: Address; id: bigint }) {
                   <div>
                     <div className="text-xs text-muted">Cover remaining</div>
                     <div className="num mt-0.5 text-3xl font-medium tracking-tight">{fmtMusd(remaining, 0)}</div>
+                <NgnHint wei={remaining} />
                   </div>
                   <div className="num text-xs text-subtle">of {fmtMusd(c.cap, 0)} MUSD</div>
                 </div>

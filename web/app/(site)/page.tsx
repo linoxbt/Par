@@ -74,6 +74,13 @@ function Hero() {
     <section className="relative overflow-hidden">
       <div className="mx-auto grid max-w-6xl items-center gap-2 px-5 pb-12 pt-10 sm:gap-6 sm:pb-16 sm:pt-14 lg:grid-cols-[0.95fr_1.05fr] lg:pt-20">
         <div className="relative z-10 animate-rise">
+          <Link
+            href="/pilot"
+            className="mb-6 inline-flex items-center gap-2 rounded-full border border-btc-line bg-btc-wash py-1 pl-1 pr-3 text-[13px] text-btc-ink hover:border-btc"
+          >
+            <span className="rounded-full bg-btc px-2 py-0.5 text-[11px] font-medium text-fg">New</span>
+            Lagos pilot &amp; underwriting market <span aria-hidden>→</span>
+          </Link>
           <h1 className="h-display text-[42px] sm:text-[60px] lg:text-[68px]">
             Promises that <br className="hidden sm:block" />
             pay themselves.
