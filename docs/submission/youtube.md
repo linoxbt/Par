@@ -23,9 +23,10 @@ In this demo:
 🐙 GitHub: https://github.com/linoxbt/par
 
 Contracts (Mezo testnet, verified):
-ParFactory 0xd550c5ed5eB5Bef621D07D2Ec75f9C0780a0b270
-ParVault implementation 0x9cEE4c639B4466dFB72117BBdb335b05359597f7
-ParCircuit 0xE0035DeD7dE078840BF63D3820A7ae9315654c79
+ParFactory 0x2907A39A64c3f304E7eEdF2F7107Bc825756E4f0
+ParVault implementation 0xd8A59feef812EDb58442d4fEe6B1285a205f7E05
+ParCircuit 0x198099cF3C11A6A7E0f107a63B013E20A96f9CB1
+ParMarket 0xb6e0aaBb4d44944b225cc697205D398DE13114e9
 
 Chapters
 0:00 The problem: trust is expensive

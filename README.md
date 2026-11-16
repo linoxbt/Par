@@ -71,6 +71,7 @@ contracts/   Solidity 0.8.24 (london), Hardhat
   contracts/ParVault.sol      vault + commitments + payout waterfall (13.1 KB)
   contracts/ParFactory.sol    EIP-1167 clones, one trove per vault
   contracts/ParCircuit.sol    trade-credit clearing hub (8.5 KB)
+  contracts/ParMarket.sol     underwriting market: cover requests, escrowed premiums
   contracts/interfaces/IMezo.sol  minimal MUSD interfaces
   contracts/mocks/MockMUSDSystem.sol  model of the MUSD rules Par depends on (tests / local dev only)
   test/Par.test.ts            15 tests (the spec's 6 + section 8.2 additions + access control)
@@ -86,12 +87,13 @@ docs/demo.md           2:30 demo script and judge Q&A
 
 | Contract                | Testnet (matsnet, 31611) |
 | ----------------------- | ------------------------ |
-| ParFactory              | [`0xd550c5ed5eB5Bef621D07D2Ec75f9C0780a0b270`](https://explorer.test.mezo.org/address/0xd550c5ed5eB5Bef621D07D2Ec75f9C0780a0b270#code) (verified) |
-| ParVault implementation | [`0x9cEE4c639B4466dFB72117BBdb335b05359597f7`](https://explorer.test.mezo.org/address/0x9cEE4c639B4466dFB72117BBdb335b05359597f7#code) (verified) |
-| ParCircuit              | [`0xE0035DeD7dE078840BF63D3820A7ae9315654c79`](https://explorer.test.mezo.org/address/0xE0035DeD7dE078840BF63D3820A7ae9315654c79#code) (verified) |
+| ParFactory              | [`0x2907A39A64c3f304E7eEdF2F7107Bc825756E4f0`](https://explorer.test.mezo.org/address/0x2907A39A64c3f304E7eEdF2F7107Bc825756E4f0#code) (verified) |
+| ParVault implementation | [`0xd8A59feef812EDb58442d4fEe6B1285a205f7E05`](https://explorer.test.mezo.org/address/0xd8A59feef812EDb58442d4fEe6B1285a205f7E05#code) (verified) |
+| ParCircuit              | [`0x198099cF3C11A6A7E0f107a63B013E20A96f9CB1`](https://explorer.test.mezo.org/address/0x198099cF3C11A6A7E0f107a63B013E20A96f9CB1#code) (verified) |
+| ParMarket               | [`0xb6e0aaBb4d44944b225cc697205D398DE13114e9`](https://explorer.test.mezo.org/address/0xb6e0aaBb4d44944b225cc697205D398DE13114e9#code) (verified) |
 
-Deployed at block 16,782,612 (see `contracts/deployments/matsnet.json`). This is the post-audit deployment; earlier
-deployments (`0x3837…0297`, `0xF524…3040`) are superseded and should not be used.
+Deployed at block 16,825,551 (see `contracts/deployments/matsnet.json`), with the underwriting market. Earlier
+deployments (`0xd550…b270`, `0x3837…0297`, `0xF524…3040`) are superseded and should not be used.
 
 Par integrates with the official MUSD deployment (`@mezo-org/musd-contracts@1.1.0`):
 BorrowerOperations `0xCdF7028ceAB81fA0C6971208e83fa7872994beE5`, TroveManager
@@ -106,7 +108,7 @@ Demo risk parameters: `stressBps = 4000` (survive a 40% BTC drop), `targetIcr = 
 cd contracts
 cp .env.example .env            # MATSNET_PRIVATE_KEY=0x… (a key funded with testnet BTC)
 npm install
-npm run deploy:matsnet          # deploys the ParVault implementation, ParFactory(impl, …) and ParCircuit(factory),
+npm run deploy:matsnet          # deploys the ParVault implementation, ParFactory(impl, …), ParCircuit(factory) and ParMarket(factory),
                                 # refuses to run if the RPC chainId doesn't match, writes deployments/matsnet.json
 node scripts/export-abis.js     # refreshes web/lib/abi.ts, keeper/src/abi.ts and web/lib/deployments.ts
 # optional: pre-create the Circuit demo (needs MATSNET_DEMO_KEYS with three funded keys)
@@ -155,7 +157,7 @@ MetaMask to `http://127.0.0.1:8545` (chain 31337) with a Hardhat test key.
 Against testnet:
 
 ```bash
-cd web && cp .env.example .env.local   # NEXT_PUBLIC_FACTORY, NEXT_PUBLIC_CIRCUIT, NEXT_PUBLIC_FACTORY_BLOCK,
+cd web && cp .env.example .env.local   # NEXT_PUBLIC_FACTORY, NEXT_PUBLIC_CIRCUIT, NEXT_PUBLIC_MARKET, NEXT_PUBLIC_FACTORY_BLOCK,
 npm install --legacy-peer-deps         # NEXT_PUBLIC_WC_PROJECT_ID (Reown)
 npm run dev
 

@@ -4,7 +4,7 @@ Record your screen (phone or desktop) with your voice over it. Keep it at 2:00. 
 Loom and paste the link into the Akindo form.
 
 **Before recording:** open https://par-rosy.vercel.app in one tab, `/docs` in another, and the explorer page for
-ParCircuit `0xE0035DeD7dE078840BF63D3820A7ae9315654c79`. If the demo circle has been re-seeded, open
+ParCircuit `0x198099cF3C11A6A7E0f107a63B013E20A96f9CB1`. If the demo circle has been re-seeded, open
 `/circuit/0` too.
 
 | Time | Screen | Say |

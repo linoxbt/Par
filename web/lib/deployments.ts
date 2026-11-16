@@ -4,10 +4,11 @@ export const DEPLOYMENTS = {
   "matsnet": {
     "network": "matsnet",
     "chainId": 31611,
-    "ParFactory": "0xd550c5ed5eB5Bef621D07D2Ec75f9C0780a0b270",
-    "ParVaultImplementation": "0x9cEE4c639B4466dFB72117BBdb335b05359597f7",
-    "ParCircuit": "0xE0035DeD7dE078840BF63D3820A7ae9315654c79",
-    "factoryBlock": 16782612,
+    "ParFactory": "0x2907A39A64c3f304E7eEdF2F7107Bc825756E4f0",
+    "ParVaultImplementation": "0xd8A59feef812EDb58442d4fEe6B1285a205f7E05",
+    "ParCircuit": "0x198099cF3C11A6A7E0f107a63B013E20A96f9CB1",
+    "ParMarket": "0xb6e0aaBb4d44944b225cc697205D398DE13114e9",
+    "factoryBlock": 16825551,
     "musd": {
       "chainId": 31611,
       "BorrowerOperations": "0xCdF7028ceAB81fA0C6971208e83fa7872994beE5",
