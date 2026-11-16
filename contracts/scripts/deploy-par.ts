@@ -36,12 +36,18 @@ async function main() {
   await circuit.waitForDeployment()
   console.log("ParCircuit", await circuit.getAddress())
 
+  const Market = await ethers.getContractFactory("ParMarket")
+  const market = await Market.deploy(await factory.getAddress())
+  await market.waitForDeployment()
+  console.log("ParMarket", await market.getAddress())
+
   const out = {
     network: network.name,
     chainId: A.chainId,
     ParFactory: await factory.getAddress(),
     ParVaultImplementation: await factory.implementation(),
     ParCircuit: await circuit.getAddress(),
+    ParMarket: await market.getAddress(),
     factoryBlock,
     musd: A,
   }
@@ -51,6 +57,7 @@ async function main() {
   console.log(`NEXT_PUBLIC_CHAIN=${network.name === "mezo" ? "mainnet" : "testnet"}`)
   console.log(`NEXT_PUBLIC_FACTORY=${out.ParFactory}`)
   console.log(`NEXT_PUBLIC_CIRCUIT=${out.ParCircuit}`)
+  console.log(`NEXT_PUBLIC_MARKET=${out.ParMarket}`)
   console.log(`NEXT_PUBLIC_FACTORY_BLOCK=${factoryBlock}`)
 }
 

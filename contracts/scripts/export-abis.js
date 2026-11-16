@@ -8,6 +8,7 @@ const abis = {
   parFactoryAbi: art("ParFactory.sol/ParFactory.json"),
   parVaultAbi: art("ParVault.sol/ParVault.json"),
   parCircuitAbi: art("ParCircuit.sol/ParCircuit.json"),
+  parMarketAbi: art("ParMarket.sol/ParMarket.json"),
   mockPriceFeedAbi: art("mocks/MockMUSDSystem.sol/MockPriceFeed.json"),
 }
 

@@ -22,6 +22,7 @@ async function main() {
     TARGET_ICR,
   )
   const circuit = await (await ethers.getContractFactory("ParCircuit")).deploy(await factory.getAddress())
+  const market = await (await ethers.getContractFactory("ParMarket")).deploy(await factory.getAddress())
   const factoryBlock = (await factory.deploymentTransaction()!.wait())!.blockNumber
 
   // background system debt so TCR is realistic
@@ -37,6 +38,7 @@ async function main() {
     ParFactory: await factory.getAddress(),
     ParVaultImplementation: await factory.implementation(),
     ParCircuit: await circuit.getAddress(),
+    ParMarket: await market.getAddress(),
     factoryBlock,
     musd: {
       BorrowerOperations: await system.getAddress(),
@@ -48,6 +50,7 @@ async function main() {
   }
   fs.writeFileSync(path.join(__dirname, "..", "deployments", "localhost.json"), JSON.stringify(out, null, 2) + "\n")
   console.log(JSON.stringify(out, null, 2))
+  console.log(`NEXT_PUBLIC_MARKET=${out.ParMarket}`)
 }
 
 main().catch((e) => {
