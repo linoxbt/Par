@@ -49,6 +49,8 @@ All three run the stress test with the new cap (`health(cap)`) and revert `Unhea
 | `createClaim(beneficiary, principal, arbiter, uint128 cap, uint64 expiry, uint32 challengeWindow) → id` | Non-zero beneficiary and arbiter; the arbiter must differ from the owner, the beneficiary and the principal; non-zero cap; expiry in the future; `challengeWindow ≥ 60`. |
 | `createClearingLine(address circuit, uint128 cap, uint64 expiry) → id` | `circuit` must be a contract; non-zero cap; expiry in the future. The principal is the owner. |
 
+**From the market.** `fillRequest(address market, uint256 requestId) → id` (owner) backs an open [ParMarket](/docs/reference/par-market) request: it creates the scheduled guarantee or claim bond the request describes, with the requester as principal, under the same rules and stress test as above. The market then checks the terms match and pays the escrowed premium to the owner. Reverts `NotActive` if the request isn't open; any failure reverts the whole fill.
+
 ## Installments
 
 | Function | Access | Description |

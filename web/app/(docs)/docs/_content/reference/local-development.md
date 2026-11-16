@@ -4,7 +4,7 @@ Par is three Solidity contracts, a keeper and this Next.js app. Everything runs 
 
 | Folder | What it holds |
 | --- | --- |
-| `contracts/` | `ParFactory`, `ParVault`, `ParCircuit`, a MUSD model for tests (`contracts/mocks`), Hardhat tests and deploy scripts. |
+| `contracts/` | `ParFactory`, `ParVault`, `ParCircuit`, `ParMarket`, a MUSD model for tests (`contracts/mocks`), Hardhat tests and deploy scripts. |
 | `keeper/` | The [keeper](/docs/reference/keeper) bot (TypeScript, viem). |
 | `web/` | This app (Next.js 14, wagmi, Reown AppKit, Mezo Passport). |
 | `scripts/` | `dev-local.sh`, the one-command local demo. |
@@ -47,7 +47,7 @@ cd contracts
 MATSNET_PRIVATE_KEY=<deployer key> npm run deploy:matsnet
 ```
 
-The script deploys ParFactory (with `stressBps = 4000` and `targetIcr = 1.6e18`) and ParCircuit, writes `contracts/deployments/matsnet.json`, and prints the frontend and keeper environment. `npm run abis` then regenerates `web/lib/deployments.ts`, which these docs read their [addresses](/docs/reference/addresses) from.
+The script deploys ParFactory (with `stressBps = 4000` and `targetIcr = 1.6e18`) ParCircuit and ParMarket, writes `contracts/deployments/matsnet.json`, and prints the frontend and keeper environment. `npm run abis` then regenerates `web/lib/deployments.ts`, which these docs read their [addresses](/docs/reference/addresses) from.
 
 ## Regenerate ABIs
 
@@ -65,6 +65,7 @@ npm install --legacy-peer-deps
 NEXT_PUBLIC_CHAIN=testnet \
 NEXT_PUBLIC_FACTORY=<factory> \
 NEXT_PUBLIC_CIRCUIT=<circuit> \
+NEXT_PUBLIC_MARKET=<market> \
 NEXT_PUBLIC_FACTORY_BLOCK=<block> \
 NEXT_PUBLIC_REOWN_PROJECT_ID=<project id> \
 npm run dev

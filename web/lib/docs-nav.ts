@@ -12,7 +12,7 @@ export type DocPage = {
   updated?: string
 }
 
-export const DOCS_UPDATED = "14 November 2026"
+export const DOCS_UPDATED = "16 November 2026"
 
 export type DocTab = { name: string; href: string }
 
@@ -30,6 +30,7 @@ export const GROUP_ICONS: Record<string, string> = {
   Setup: "wallet",
   Guarantees: "file",
   Circuit: "circuit",
+  Market: "receipt",
   Contracts: "code",
   Protocol: "sliders",
   Developers: "terminal",
@@ -63,11 +64,13 @@ export const DOC_PAGES: DocPage[] = [
   { href: "/docs/guides/claims", title: "File, dispute and resolve a claim", tab: "Guides", group: "Guarantees", description: "The claim lifecycle for bonds: file, challenge window, dispute, arbiter." },
   { href: "/docs/guides/join-circle", title: "Join a circle and post invoices", tab: "Guides", group: "Circuit", description: "Pledge a clearing line, become a member, then bill and accept invoices." },
   { href: "/docs/guides/settle-cycle", title: "Settle a cycle", tab: "Guides", group: "Circuit", description: "Settle as a net debtor, force-settle after the window, and claim as a net creditor." },
+  { href: "/docs/guides/underwriting", title: "Request or back cover", tab: "Guides", group: "Market", description: "Post a cover request with a premium, or back one from your vault and earn it. Includes the Lagos pilot templates." },
 
   // Reference
   { href: "/docs/reference/par-factory", title: "ParFactory", tab: "Reference", group: "Contracts", description: "Deploys one ParVault clone per user and holds the risk parameters." },
   { href: "/docs/reference/par-vault", title: "ParVault", tab: "Reference", group: "Contracts", description: "The vault: trove management, commitments, claims, payouts and risk views." },
   { href: "/docs/reference/par-circuit", title: "ParCircuit", tab: "Reference", group: "Contracts", description: "Circles, members, invoices, netting and settlement." },
+  { href: "/docs/reference/par-market", title: "ParMarket", tab: "Reference", group: "Contracts", description: "Cover requests with escrowed premiums, filled atomically from a Par vault." },
   { href: "/docs/reference/addresses", title: "Deployed addresses", tab: "Reference", group: "Contracts", description: "Network details and contract addresses on Mezo testnet." },
   { href: "/docs/reference/parameters", title: "Protocol parameters", tab: "Reference", group: "Protocol", description: "Every number Par and MUSD use, and where it comes from." },
   { href: "/docs/reference/errors", title: "Errors", tab: "Reference", group: "Protocol", description: "Custom errors raised by the contracts, what they mean and what to do." },

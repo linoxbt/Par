@@ -24,6 +24,7 @@ export const VARS: Record<string, string> = {
   ParFactory: deployment.ParFactory,
   ParVaultImplementation: deployment.ParVaultImplementation,
   ParCircuit: deployment.ParCircuit,
+  ParMarket: ((deployment as Record<string, unknown>).ParMarket as string | undefined) ?? "0x0000000000000000000000000000000000000000",
   ...Object.fromEntries(Object.entries(deployment.musd).map(([k, v]) => [`musd.${k}`, String(v)])),
 }
 

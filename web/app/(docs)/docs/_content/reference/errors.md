@@ -38,6 +38,18 @@ Par uses Solidity custom errors. Wallets and the app decode them by name; the ke
 | `NotYet()` | Settling before close; force-settling before close + window; claiming before everything is collected and before `finalAt`; claiming again with nothing new collected. | Wait. |
 | `Done()` | Settling when not a net debtor or already settled; claiming when not a net creditor or already paid in full. | Nothing to do. |
 
+## ParMarket
+
+| Error | When | What to do |
+| --- | --- | --- |
+| `BadParams()` | A request's terms break a rule: beneficiary is you, arbiter is you or the beneficiary, deadline in the past or after the first due date (installments) or at or after expiry (bonds), or a vault creation rule. | See [ParMarket](/docs/reference/par-market#requesting). |
+| `NotRequester()` | Someone other than the requester tried to cancel. | Connect the wallet that posted the request. |
+| `NotOpen()` | The request was already filled or cancelled. | Refresh the market. |
+| `Expired()` | The request's deadline has passed. | It can't be backed any more; the requester can cancel for a refund. |
+| `NotParVault()` | `onFill` was called by something other than a factory vault. | Back requests through your vault (`fillRequest`). |
+| `SelfFill()` | The underwriter is the requester. | Someone else has to back it. |
+| `Mismatch()` | The commitment doesn't match the request exactly. | Only happens with a modified client; use `fillRequest`. |
+
 ## ParFactory
 
 | Error | When |

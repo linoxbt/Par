@@ -17,6 +17,7 @@ Par runs on **Mezo testnet**. Addresses on this page come from `web/lib/deployme
 | ParFactory | [`{{ParFactory}}`]({{explorer}}/address/{{ParFactory}}) |
 | ParVault implementation | [`{{ParVaultImplementation}}`]({{explorer}}/address/{{ParVaultImplementation}}) |
 | ParCircuit | [`{{ParCircuit}}`]({{explorer}}/address/{{ParCircuit}}) |
+| ParMarket | [`{{ParMarket}}`]({{explorer}}/address/{{ParMarket}}) |
 
 The factory was deployed at block `{{factoryBlock}}`. Indexers and the app scan events from this block. Each user's vault is its own clone; find it with `vaultsOf(owner, i)` on the factory.
 
@@ -46,5 +47,6 @@ The deploy script prints these after `deploy-par.ts`:
 NEXT_PUBLIC_CHAIN=testnet
 NEXT_PUBLIC_FACTORY={{ParFactory}}
 NEXT_PUBLIC_CIRCUIT={{ParCircuit}}
+NEXT_PUBLIC_MARKET={{ParMarket}}
 NEXT_PUBLIC_FACTORY_BLOCK={{factoryBlock}}
 ```
