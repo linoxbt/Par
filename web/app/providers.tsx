@@ -3,8 +3,9 @@
 import "@rainbow-me/rainbowkit/styles.css"
 import { connectorsForWallets, getDefaultConfig, lightTheme, RainbowKitProvider } from "@rainbow-me/rainbowkit"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { createContext, useContext, useState } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 import { http, WagmiProvider, type Config } from "wagmi"
+import { reconnect } from "wagmi/actions"
 import { createAppKit } from "@reown/appkit/react"
 import { OptionsController } from "@reown/appkit-controllers"
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi"
@@ -42,9 +43,49 @@ const mezoAppKitNetwork = defineAppKitChain({
   contracts: { multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11" } },
 })
 
-// Passport names its Bitcoin OKX connector plain "OKX"; label it so it isn't confused with OKX's EVM wallet.
+const withTimeout = <T,>(p: Promise<T>, ms: number, fallback: () => T): Promise<T> =>
+  Promise.race([p, new Promise<T>((resolve) => setTimeout(() => resolve(fallback()), ms))])
+
+/**
+ * Mezo Passport's Bitcoin wallets (via OrangeKit), with two fixes:
+ * - labelled "(Bitcoin)": Passport names its Bitcoin OKX connector plain "OKX", easily confused with OKX's EVM wallet;
+ * - safe on page load: wagmi reconnects by calling every connector's isAuthorized() in turn, and OrangeKit's asks
+ *   the extension for its Bitcoin accounts, which can wait forever (a locked or prompting OKX/Unisat/Xverse). One
+ *   stuck check left wagmi "reconnecting" with only the saved session, so transactions failed with
+ *   "connector.getChainId is not a function". Now a Bitcoin wallet is only re-checked if it was the last one used,
+ *   and never for more than a few seconds.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const btcLabel = (w: any) => (opts: any) => ({ ...w(opts), name: `${w(opts).name} (Bitcoin)` })
+const btcWallet = (w: any) => (opts: any) => {
+  const wallet = w(opts)
+  return {
+    ...wallet,
+    name: `${wallet.name} (Bitcoin)`,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    createConnector: (details: any) => {
+      const create = wallet.createConnector(details)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (cfg: any) => {
+        const c = create(cfg)
+        const isAuthorized = c.isAuthorized
+        const connect = c.connect
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        c.isAuthorized = async function (this: any) {
+          const recent = await Promise.resolve(cfg.storage?.getItem("recentConnectorId")).catch(() => null)
+          if (recent !== c.id) return false
+          return withTimeout(isAuthorized.call(this).catch(() => false), 3000, () => false)
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        c.connect = function (this: any, params: any) {
+          const p = connect.call(this, params)
+          if (!params?.isReconnecting) return p
+          return Promise.race([p, new Promise((_, reject) => setTimeout(() => reject(new Error("Bitcoin wallet did not respond")), 8000))])
+        }
+        return c
+      }
+    },
+  }
+}
 
 function makeAppKitConfig(): Config {
   // This AppKit release never forwards `enableBaseAccount` to its options store, so the wagmi adapter
@@ -56,8 +97,8 @@ function makeAppKitConfig(): Config {
       {
         groupName: "Bitcoin",
         wallets: mainnet
-          ? [xverseWalletMezoMainnet, unisatWalletMezoMainnet, okxWalletMezoMainnet].map(btcLabel)
-          : [xverseWalletMezoTestnet, unisatWalletMezoTestnet, okxWalletMezoTestnet].map(btcLabel),
+          ? [xverseWalletMezoMainnet, unisatWalletMezoMainnet, okxWalletMezoMainnet].map(btcWallet)
+          : [xverseWalletMezoTestnet, unisatWalletMezoTestnet, okxWalletMezoTestnet].map(btcWallet),
       },
     ],
     { appName: "Par", projectId: REOWN_PROJECT_ID! },
@@ -110,10 +151,36 @@ function makeFallbackConfig(): Config {
   return getConfig({ appName: "Par", mezoNetwork: mainnet ? "mainnet" : "testnet", walletConnectProjectId: WC_PROJECT_ID, ssr: true })
 }
 
+/**
+ * Browser wallets announce themselves (EIP-6963) whenever their extension loads, sometimes after wagmi's
+ * reconnect on page load has already given up. When the wallet used last time shows up late and nothing is
+ * connected, reconnect to it. Respects an explicit disconnect (the connector's isAuthorized() is false then).
+ */
+function useReconnectLateWallets(config: Config) {
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const internal = (config as any)._internal
+    const seen = new Set<string>(config.connectors.map((c) => c.uid))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return internal.connectors.subscribe((connectors: any[]) => {
+      for (const c of connectors) {
+        if (seen.has(c.uid)) continue
+        seen.add(c.uid)
+        Promise.resolve(config.storage?.getItem("recentConnectorId"))
+          .then((recent) => {
+            if (recent === c.id && config.state.status === "disconnected") reconnect(config, { connectors: [c] }).catch(() => {})
+          })
+          .catch(() => {})
+      }
+    })
+  }, [config])
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [mode] = useState<WalletMode>(() => (REOWN_PROJECT_ID && NETWORK !== "local" ? "appkit" : "rainbow"))
   const [config] = useState(() => (mode === "appkit" ? makeAppKitConfig() : makeFallbackConfig()))
   const [qc] = useState(() => new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } }))
+  useReconnectLateWallets(config)
   const initialChain = NETWORK === "local" ? chain : mezoChain
   return (
     <ModeContext.Provider value={mode}>

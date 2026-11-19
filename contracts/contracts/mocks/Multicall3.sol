@@ -35,4 +35,9 @@ contract Multicall3 {
     function getCurrentBlockTimestamp() external view returns (uint256) {
         return block.timestamp;
     }
+
+    /// viem reads native balances through this when call batching is on.
+    function getEthBalance(address addr) external view returns (uint256) {
+        return addr.balance;
+    }
 }

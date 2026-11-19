@@ -1,18 +1,18 @@
 "use client"
 
 import Link from "next/link"
-import { Suspense, useEffect, useMemo, useState } from "react"
+import { Suspense, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { formatEther, isAddress, type Address } from "viem"
-import { useBalance, useReadContract, useSendTransaction, useWaitForTransactionReceipt } from "wagmi"
+import { useBalance, useReadContract } from "wagmi"
 import { WalletButton } from "@/components/Wallet"
 import { parFactoryAbi, parVaultAbi } from "@/lib/abi"
 import { CIRCUIT, CONFIGURED, FACTORY, GAS_COMP, addrUrl, chain } from "@/lib/config"
 import { erc20Abi } from "@/lib/mezoAbi"
 import { fmtBps, fmtBtc, fmtDate, fmtMusd, fmtPct, fmtRatio, fmtUsd, parseAmount, parseIntSafe, short, toNum } from "@/lib/format"
-import { KIND_LABEL, errorText, useChainNow, useCommitments, useMarket, useMe, useProtocol, useTx, useVault, useVaultsOf, type Commitment } from "@/lib/hooks"
+import { KIND_LABEL, useChainNow, useCommitments, useMarket, useMe, useProtocol, useTx, useVault, useVaultsOf, type Commitment } from "@/lib/hooks"
 import { liquidationPrice, maxDrop, openPreview } from "@/lib/risk"
-import { Addr, Badge, Button, Card, CardTitle, Empty, Field, HealthGauge, LinkButton, Meter, NotDeployed, Num, PageHead, Segmented, Stat, TxLink, TxStatus, inputCls } from "@/components/ui"
+import { Addr, Badge, Button, Card, CardTitle, Empty, Field, HealthGauge, LinkButton, Meter, NotDeployed, Num, PageHead, Segmented, Stat, TxStatus, inputCls } from "@/components/ui"
 
 const Z = "0x0000000000000000000000000000000000000000" as Address
 
@@ -161,7 +161,7 @@ function OpenTrove({ vault, onDone }: { vault: Address; onDone: () => void }) {
   const { me } = useMe()
   const p = useProtocol()
   const m = useMarket()
-  const { data: bal } = useBalance({ address: me })
+  const { data: bal } = useBalance({ address: me, chainId: chain.id })
   const [btc, setBtc] = useState("0.25")
   const [seed, setSeed] = useState("")
   const { data: vs } = useVault(vault)
@@ -531,16 +531,11 @@ function TopUp({ vault, onDone }: { vault: Address; onDone: () => void }) {
 
 function Reserve({ vault, idle, onDone }: { vault: Address; idle: bigint; onDone: () => void }) {
   const [v, setV] = useState("")
-  const send = useSendTransaction()
-  const rc = useWaitForTransactionReceipt({ hash: send.data })
+  const tFund = useTx(() => {
+    setV("")
+    onDone()
+  })
   const tIdle = useTx(onDone)
-  useEffect(() => {
-    if (rc.isSuccess) {
-      setV("")
-      onDone()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rc.isSuccess])
   return (
     <div className="flex flex-col gap-3">
       <AmountRow
@@ -550,17 +545,12 @@ function Reserve({ vault, idle, onDone }: { vault: Address; idle: bigint; onDone
         value={v}
         onChange={setV}
         action={
-          <Button busy={send.isPending || rc.isLoading} disabled={!parseAmount(v)} onClick={() => send.sendTransaction({ to: vault, value: parseAmount(v)!, chainId: chain.id })}>
+          <Button busy={tFund.busy} disabled={!parseAmount(v)} onClick={() => tFund.send({ to: vault, value: parseAmount(v)! })}>
             Fund
           </Button>
         }
       />
-      {send.data && (
-        <p className="text-sm text-muted">
-          {rc.isSuccess ? "Confirmed" : "Pending"} · <TxLink hash={send.data} />
-        </p>
-      )}
-      {send.error && <p className="rounded-lg bg-bad-wash px-3 py-2 text-sm text-bad">{errorText(send.error)}</p>}
+      <TxStatus tx={tFund} />
       {idle > 0n && (
         <div>
           <Button variant="ghost" size="sm" busy={tIdle.busy} onClick={() => tIdle.send({ address: vault, abi: parVaultAbi, functionName: "withdrawIdleBTC", args: [idle] })}>

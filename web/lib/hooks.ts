@@ -6,13 +6,16 @@ import {
   useAccount,
   useBalance,
   useBlock,
+  useConfig,
   usePublicClient,
   useReadContract,
   useReadContracts,
+  useSendTransaction,
   useSwitchChain,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi"
+import { getAccount, reconnect } from "wagmi/actions"
 import { parCircuitAbi, parFactoryAbi, parVaultAbi } from "./abi"
 import { chain, CIRCUIT, FACTORY, FACTORY_BLOCK, INTEREST_RATE_MANAGER, MUSD_DEFAULTS, NETWORK } from "./config"
 import { borrowerOpsAbi, erc20Abi, interestRateManagerAbi, priceFeedAbi, troveManagerAbi } from "./mezoAbi"
@@ -143,7 +146,7 @@ export function useVault(vault?: Address) {
     ],
     query: { enabled: !!vault && !!p, refetchInterval: 10_000 },
   })
-  const { data: btc, refetch: refetchBtc } = useBalance({ address: vault, query: { enabled: !!vault, refetchInterval: 10_000 } })
+  const { data: btc, refetch: refetchBtc } = useBalance({ address: vault, chainId: chain.id, query: { enabled: !!vault, refetchInterval: 10_000 } })
   const data = useMemo(() => {
     const r = q.data
     if (!r) return undefined
@@ -357,9 +360,35 @@ export function errorText(e: unknown): string {
  * - If the wallet is on another chain it is asked to switch first; writes never go to another chain.
  * - A second send while one is in flight is ignored.
  */
+/**
+ * The current wallet connection, once it is live. After a page load wagmi restores the last session from
+ * storage as plain data and reconnects in the background; until that finishes the address is known but
+ * the connector has no methods, and any write fails ("connector.getChainId is not a function"). Waits for
+ * the reconnect (starting one if needed) for up to `timeoutMs`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function liveAccount(config: any, timeoutMs = 10_000) {
+  const live = () => {
+    const a = getAccount(config)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return a.status === "connected" && typeof (a.connector as any)?.getChainId === "function" ? a : undefined
+  }
+  if (live()) return live()
+  if (getAccount(config).status !== "reconnecting") reconnect(config).catch(() => {})
+  const end = Date.now() + timeoutMs
+  while (Date.now() < end) {
+    await new Promise((r) => setTimeout(r, 250))
+    const a = live()
+    if (a) return a
+  }
+  return undefined
+}
+
 export function useTx(onDone?: (receipt: any) => void) {
+  const config = useConfig()
   const { writeContractAsync, isPending, reset } = useWriteContract()
-  const { address, chainId: walletChain } = useAccount()
+  const { sendTransactionAsync, isPending: sendPending, reset: resetSend } = useSendTransaction()
+  const { address } = useAccount()
   const { switchChainAsync } = useSwitchChain()
   const pc = usePublicClient({ chainId: chain.id })
   const [hash, setHash] = useState<`0x${string}`>()
@@ -380,20 +409,32 @@ export function useTx(onDone?: (receipt: any) => void) {
     setPreparing(true)
     try {
       if (!address) throw new Error("Connect a wallet first.")
-      if (walletChain !== chain.id) {
+      const acct = await liveAccount(config)
+      if (!acct)
+        throw new Error(
+          "Your wallet hasn't finished reconnecting. Unlock your wallet extension, or disconnect and connect again from the wallet menu.",
+        )
+      if (acct.chainId !== chain.id) {
         try {
           await switchChainAsync({ chainId: chain.id })
         } catch {
           throw new Error(`Switch your wallet to ${chain.name} to continue.`)
         }
       }
-      if (pc) await pc.simulateContract({ ...args, account: address })
-      const h = await writeContractAsync({ ...args, chainId: chain.id })
+      let h: `0x${string}`
+      if ("to" in args) {
+        // plain value transfer: { to, value }
+        h = await sendTransactionAsync({ to: args.to, value: args.value, chainId: chain.id })
+      } else {
+        if (pc) await pc.simulateContract({ ...args, account: acct.address })
+        h = await writeContractAsync({ ...args, chainId: chain.id })
+      }
       setHash(h)
       return h
     } catch (e) {
       setError(errorText(e))
       reset()
+      resetSend()
     } finally {
       setPreparing(false)
       inflight.current = false
@@ -403,7 +444,7 @@ export function useTx(onDone?: (receipt: any) => void) {
     send,
     hash,
     error: error ?? (receipt.error ? errorText(receipt.error) : undefined),
-    busy: preparing || isPending || (!!hash && receipt.isLoading),
+    busy: preparing || isPending || sendPending || (!!hash && receipt.isLoading),
     done: receipt.isSuccess,
     receipt: receipt.data,
   }
